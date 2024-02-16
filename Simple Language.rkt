@@ -30,10 +30,14 @@
   (lambda (lis declared_list value_list)
     (cond
       ((null? (car lis)) ('()))
-      ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error"))) ;if the first word is "var" and this sublist just has the declaration in it
-      ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (cddar lis) declared_list value_list))));if the first word is "var" and there is more in this sublist than just the declaration
-      ((and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (cddar lis)))); if it's an assignment statement and it's in the declared list
-      ;                                                                                   ^^^^
+      ;if the first word is "var" and this sublist just has the declaration in it
+      ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
+      ;if the first word is "var" and there is more in this sublist than just the declaration
+      ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (cddar lis) declared_list value_list))))
+      ; if it's an assignment statement and it's in the declared list
+      ((and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (cddar lis))))
+      
+  ;                                                                                  ^^^^
       ; Remy: (arrow from above) This line is really close, but we need a "M_state_remove_from_declared_list" function to run before this/the result of that be the input to the M_state_add_to_declared_list function  
       ; Remy: lots of other stuff belongs here
       )))
@@ -61,26 +65,65 @@
 ;(M_integer (- (* 6 (+ 8 (/ 6 3))) (/ 10 2)))...answer should be 55
 
 
+; ((*(+ 3 5)10)) (var x))
+; car: (*(+ 3 5)10))
+; cdr: (var x)
+; cdar: (+ 3 5)10)
+; cadar: (+ 3 5)
+; caddar: 10
+; caar: * 
+
+
 ;Remy: Almost certain that the parser takes care of precendence issues for us. 
 (define M_integer
   (lambda (expression declared_list value_list)
-    (define left cadr)
-    (define right caddr)
-    (define op car)
     (cond
+      ((null? expression) '())
       ((number? expression) expression)
-      ((and (list? left) (list? right))(M_integer (list(M_integer left declared_list value_list)) op (M_integer right declared_list value_list))); if both the left and right of the operator are lists
-      ((list? left) (M_integer (list (M_integer (left op right) declared_list value_list)))); if both aren't lists, but the left is a list...
-      ((list? right) (M_integer (list left op (M_integer right declared_list value_list))));if both aren't lists, the left isn't a list, but the right is a list
-      ((not (number? left)) (M_integer (cons (M_state_lookup left declared_list value_list) right) declared_list value_list));see M_state_lookup below. It's not working and causing an infinite loop.   
-      ((not (number? right)) (M_integer (cons left (M_state_lookup right declared_list value_list)) declared_list value_list))
+      ((and (and (eq? (car expression) '+) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
+       (add (get_element 1 expression) (get_element 2 expression)))
+      
+      ((and (and (eq? (car expression) '-) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
+       (sub (get_element 1 expression) (get_element 2 expression)))
+      
+      ((and (and (eq? (car expression) '*) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
+       (mult (get_element 1 expression) (get_element 2 expression)))
+      
+      ((and (and (eq? (car expression) '/) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
+       (div (get_element 1 expression) (get_element 2 expression)))
+      
+      ((and (and (eq? (car expression) '%) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
+       (mod (get_element 1 expression) (get_element 2 expression)))
+
+      ((list? (get_element 1 expression))
+       (M_integer (cons(cons (get_element 0 expression)
+                             (M_integer (get_element 1 expression) declared_list value_list)) (get_element 2 expression)) declared_list value_list))
+
+      ((list? (get_element 2 expression))
+       (M_integer (cons(cons (get_element 0 expression)
+                              (get_element 1 expression))(M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
+      
+     ; ((list? (car expression)) (M_integer (car expression) declared_list value_list))
+      ;(else (
+             
+      ;((and (list? left) (list? right))(M_integer (list(M_integer left declared_list value_list)) op (M_integer right declared_list value_list))); if both the left and right of the operator are lists
+     ; ((list? left) (M_integer (list (M_integer left declared_list value_list)) declared_list value_list)); if both aren't lists and left is a list, but the left is a list...
+      ;((list? right) (M_integer (list op left (M_integer (car right) declared_list value_list))));if both aren't lists and right is a list, the left isn't a list, but the right is a list
+      ;((not (number? left)) (M_integer (cons (M_state_lookup left declared_list value_list) right) declared_list value_list));see M_state_lookup below. It's not working and causing an infinite loop.   
+      ;((not (number? right)) (M_integer (cons left (M_state_lookup right declared_list value_list)) declared_list value_list))
+     
+      ; TO-DO: Remy: Idk what the assignment means when it says we need to implement the "unary -". Does that mean negate/make neg if pos and pos if neg? 
+      ;(else (0))
+      )))
+
+(define do_op
+  (lambda (op left right)
+    (cond
       ((eq? op '+) (add left right))
       ((eq? op '-) (sub left right))
       ((eq? op '*) (mult left right))
       ((eq? op '/) (div left right))
-      ((eq? op '%) (remainder left right))
-      ; TO-DO: Remy: Idk what the assignment means when it says we need to implement the "unary -". Does that mean negate/make neg if pos and pos if neg? 
-      ;(else (0))
+      ((eq? op '%) (mod left right))
       )))
 
 (define add
@@ -133,3 +176,11 @@
       ((null? lis) #f)
       ((eq? x (car lis)) #t)
       (else (member? x (cdr lis))))))
+
+(define get_element
+  (lambda (index lis);first item = 0
+    (cond
+      ((null? lis) '())
+      ((eq? index 0) (car lis))
+      (else (get_element (- index 1) (cdr lis)))
+      )))
