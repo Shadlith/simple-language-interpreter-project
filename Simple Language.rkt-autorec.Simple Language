@@ -33,7 +33,7 @@
       ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error"))) ;if the first word is "var" and this sublist just has the declaration in it
       ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (cddar lis) declared_list value_list))));if the first word is "var" and there is more in this sublist than just the declaration
       ((and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (cddar lis)))); if it's an assignment statement and it's in the declared list
-      ;                                                                                   ^^^^
+      ;                                                                                   ^
       ; Remy: (arrow from above) This line is really close, but we need a "M_state_remove_from_declared_list" function to run before this/the result of that be the input to the M_state_add_to_declared_list function  
       ; Remy: lots of other stuff belongs here
       )))
@@ -72,8 +72,8 @@
       ((and (list? left) (list? right))(M_integer (list(M_integer left declared_list value_list)) op (M_integer right declared_list value_list))); if both the left and right of the operator are lists
       ((list? left) (M_integer (list (M_integer (left op right) declared_list value_list)))); if both aren't lists, but the left is a list...
       ((list? right) (M_integer (list left op (M_integer right declared_list value_list))));if both aren't lists, the left isn't a list, but the right is a list
-      ((not (number? left)) (M_integer (cons (M_state_lookup left declared_list value_list) right) declared_list value_list));see M_state_lookup below. It's not working and causing an infinite loop.   
-      ((not (number? right)) (M_integer (cons left (M_state_lookup right declared_list value_list)) declared_list value_list))
+      ((not (number? left)) (M_integer (M_state_lookup left declared_list value_list) declared_list value_list))
+      ((not (number? right)) (M_integer (M_state_lookup right declared_list value_list) declared_list value_list))
       ((eq? op '+) (add left right))
       ((eq? op '-) (sub left right))
       ((eq? op '*) (mult left right))
@@ -123,7 +123,7 @@
   (lambda (var declared_list value_list)
     (cond
       ((null? declared_list) '())
-      ((eq? var (car declared_list)) (car value_list));Remy: this line is currently not working and is causing an infinite loop. maybe the cars/cdrs are wrong, but this should be matching on the first iteration through for "x=10". 
+      ((eq? var (car declared_list)) (car value_list))
       (else (M_state_lookup var (cdr declared_list) (cdr value_list)))
       )))
 
