@@ -1,4 +1,5 @@
 #lang racket
+
 ; Remy: To start, go and do the "abstractoin practice" in Module 3. You can also just look at the posted comments of answers for the last "abstraction practice".
 ; Remy: Next, read my notes. They explain some of my decisions. https://docs.google.com/document/d/1FqZTvddmMBunkmgT6yZkYWjuNLRvjeoO4_Zh7lqix0w/edit?usp=sharing
 ; Remy: Here is what the parser outputs for the example problem given in the assignment:
@@ -11,12 +12,6 @@
 
 (require "simpleParser.rkt")
 
-;Remy: This is what I thought we should do at first....make a list that we keep adding to...but I think we should get rid of this
-;Remy: b/c he said in the live session we shouldn't do this....it's not good functional programming/shouldn't be necessary. 
-(define declared_list '())
-(define value_list '())
-
-
 (define parse
   (lambda (filename)
     (parser filename)
@@ -27,37 +22,27 @@
   (lambda (filename)
     (define parsed (parse filename))
     (print parsed);just to see what it outputs
-    (evaluate parsed declared_list value_list)
+    (evaluate parsed '() '())
     ))
 
-;Remy: This may need its inputs adjusted. 
+;Remy: This is good for the first 3 cond lines. Next, we need to figure out assignment. It will likely get called where we have "stuff" right now.  
 (define evaluate
   (lambda (lis declared_list value_list)
     (cond
-      ((null? (car lis)) (print 1)); "print 1" is just dummy stuff to see if it was hitting that line correctly. 
-      ((eq? 'var (caar lis)) (M_state_add_to_declared_list declared_list (cdar lis)) (evaluate (cdr lis) declared_list value_list))
-      ((eq? '= (caar lis)) (M_state_add_to_value_list value_list (cddar lis) declared_list (cadar lis))); Remy: this needs evalute run on the cdr at the end of this line
+      ((null? (car lis)) ('()))
+      ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
+      ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "stuff")))
+      ;((eq? '= (caar lis)) (M_state_add_to_value_list value_list (cddar lis) declared_list (cadar lis))); Remy: this needs evalute run on the cdr at the end of this line
       ; Remy: lots of other stuff belongs here
-      (evaluate(cdr lis))
       )))
 
-; Remy: I'm trying to do the second option mentioned in the homework where you have 2 lists for bindings....one with variables and one with values. 
-; Remy: need to change this just add to the declared list.....should probably use cons instead of append. 
 (define M_state_add_to_declared_list
   (lambda (declared_list var)
-    (append declared_list var)
-    (print declared_list)
+    (cons var declared_list)
     ))
 
-               
-; Remy: idk if this needs all of these inputs I have here. Maybe this should be combined with the above? Maybe it should stay separate for abstraction purposes...
-; Remy: regardless, adding to the value list needs to be tied to (aka also make changes at the same time) the declared list addition if it's an assignment statement.
-; Remy: Also, for assignment statements, we need to remove the value from the list first. 
 (define M_state_add_to_value_list
-  (lambda (value_list val declared_list var)
-    (cond
-      ((null? declared_list) (print ("ERROR: variable not declared yet")))
-      ((eq? var (car declared_list)) (cons val (car value_list)))
-      (else (cons (car declared_list) (M_state_add_to_value_list (cdr value_list) val (cdr declared_list) var)))
-       )))
+  (lambda (value_list val)
+      (cons val value_list)
+       ))
 
