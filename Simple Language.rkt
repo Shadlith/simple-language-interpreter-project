@@ -35,8 +35,8 @@
       ;if the first word is "var" and there is more in this sublist than just the declaration
       ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (cddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list
-      ((and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (cddar lis))))
-      
+      ((and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (cddar lis))))
+      ;finish
   ;                                                                                  ^^^^
       ; Remy: (arrow from above) This line is really close, but we need a "M_state_remove_from_declared_list" function to run before this/the result of that be the input to the M_state_add_to_declared_list function  
       ; Remy: lots of other stuff belongs here
@@ -52,6 +52,14 @@
       (cons val value_list)
        ))
 
+;if the variable is already in the declared-list, then this changes the value in the value list.
+(define M_modify_value_list
+  (lambda (declared_list value_list var newval)
+    (cond
+      ((null? declared_list) value_list)
+      ((eq? var (car declared_list)) (cons (car newval) (cdr value_list)))
+      (else (cons (car value_list) (M_modify_value_list (cdr declared_list) (cdr value_list) var newval)))
+    )))
 ;(M_integer (+ 3 5))
 ;(M_integer (-(+ 3 5)10))
 ;(M_integer (*(+ 3 5)10))
