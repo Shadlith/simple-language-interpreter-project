@@ -2,3 +2,4 @@
 compiled/drracket/errortrace/lex_rkt.dep
 compiled/drracket/errortrace/simpleParser_rkt.dep
 *.dep
+tempfile.txt
