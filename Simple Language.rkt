@@ -34,7 +34,7 @@
       ;if the first word is "var" and this sublist just has the declaration in it
       ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
       ;if the first word is "var" and there is more in this sublist than just the declaration
-      ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (cddar lis) declared_list value_list))))
+      ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number
