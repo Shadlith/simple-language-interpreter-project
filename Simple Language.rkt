@@ -107,12 +107,12 @@
        (mod (get_element 1 expression) (get_element 2 expression)))
 
       ((list? (get_element 1 expression))
-       (M_integer (cons(cons (get_element 0 expression)
-                             (M_integer (get_element 1 expression) declared_list value_list)) (get_element 2 expression)) declared_list value_list))
+       (M_integer (list (get_element 0 expression)
+                             (M_integer (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
 
       ((list? (get_element 2 expression))
-       (M_integer (cons(cons (get_element 0 expression)
-                              (get_element 1 expression))(M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
+       (M_integer (list (get_element 0 expression)
+                              (get_element 1 expression)  (M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
       
      ; ((list? (car expression)) (M_integer (car expression) declared_list value_list))
       ;(else (
