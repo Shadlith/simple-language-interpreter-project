@@ -38,7 +38,9 @@
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number
-      ((and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (caddar lis))))
+      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (number? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (caddar lis))))
+      ; if it's an assignment statement and it's in the declared list, assuming the second value is a variable
+      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (member? (caddar lis) declared_list)) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list))))
       ;finish
   ;                                                                                  ^^^^
       ; Remy: (arrow from above) This line is really close, but we need a "M_state_remove_from_declared_list" function to run before this/the result of that be the input to the M_state_add_to_declared_list function  
@@ -91,6 +93,7 @@
     (cond
       ((null? expression) '())
       ((number? expression) expression)
+      ((member? expression declared_list) 15) 
       ((and (and (eq? (car expression) '+) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
        (add (get_element 1 expression) (get_element 2 expression)))
       
@@ -113,7 +116,14 @@
       ((list? (get_element 2 expression))
        (M_integer (list (get_element 0 expression)
                               (get_element 1 expression)  (M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
-      
+
+      ((member? (get_element 1 expression) declared_list)
+       (M_integer (list (get_element 0 expression)
+                             (M_state_lookup (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
+
+      ((member? (get_element 2 expression) declared_list)
+       (M_integer (list (get_element 0 expression)
+                              (get_element 1 expression)  (M_state_lookup (get_element 2 expression) declared_list value_list)) declared_list value_list))
      ; ((list? (car expression)) (M_integer (car expression) declared_list value_list))
       ;(else (
              
