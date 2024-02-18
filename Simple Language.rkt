@@ -93,7 +93,6 @@
     (cond
       ((null? expression) '())
       ((number? expression) expression)
-      ((member? expression declared_list) 15) 
       ((and (and (eq? (car expression) '+) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
        (add (get_element 1 expression) (get_element 2 expression)))
       
