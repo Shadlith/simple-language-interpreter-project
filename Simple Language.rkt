@@ -37,7 +37,9 @@
       ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (truefalse_converter (M_boolean (caddar lis) declared_list value_list)))))
       ;if the first word is "var" and there is more in this sublist than just the declaration
       ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (caddar lis) declared_list value_list))))
-      ; if it's an assignment statement and it's in the declared list, assuming the second value is a list
+      ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and a boolean
+      ((and (and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (truefalse_converter (M_boolean (caddar lis) declared_list value_list)))))
+      ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and not a boolean
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (number? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (caddar lis))))
