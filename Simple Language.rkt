@@ -25,7 +25,6 @@
     (evaluate parsed '() '())
     ))
 
-;Remy: This is good for the first 3 cond lines. Next, we need to figure out assignment. It will likely get called where we have "stuff" right now.  
 (define evaluate
   (lambda (lis declared_list value_list)
     (cond
@@ -48,7 +47,10 @@
       ;finish
   ;                                                                                  ^^^^
       ; Remy: (arrow from above) This line is really close, but we need a "M_state_remove_from_declared_list" function to run before this/the result of that be the input to the M_state_add_to_declared_list function  
-      ; Remy: lots of other stuff belongs here
+      
+      ; if the list starts with "if" and the condition next to it is true...then....not sure if the then part is correct. 
+      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list)) (evaluate (evaluate (caddr lis) declared_list value_list) declared_list value_list)) ; added on plane 
+
       )))
 
 (define M_state_add_to_declared_list
@@ -197,6 +199,11 @@
       ; as above but for right side
       ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression)))) (M_boolean (list (get_element 0 expression) (get_element 1 expression)) (M_boolean (get_element 2 expression) declared_list value_list) declared_list value_list))
       ((list? (get_element 2 expression)) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
+      ; if the left or right element is not a number, look up the value of the variable. 
+      ((not(number? (get_element 1 expression))) (M_boolean (list (get_element 0 expression) (M_state_lookup (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list));added on plane
+      ((not(number? (get_element 2 expression))) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_state_lookup (get_element 2 expression) declared_list value_list) ) declared_list value_list));added on plane
+
+
       ((eq? (car expression) '==) (equal (get_element 1 expression) (get_element 2 expression)))
       ((eq? (car expression) '!=) (not (equal (get_element 1 expression) (get_element 2 expression))))
       ((eq? (car expression) '<) (< (get_element 1 expression) (get_element 2 expression)))
