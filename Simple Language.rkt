@@ -34,7 +34,7 @@
       ;if the first word is "var" and this sublist just has the declaration in it
       ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
       ;if the first word is "var" and this sublist is a boolean
-      ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_boolean (caddar lis) declared_list value_list))))
+      ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (truefalse_converter (M_boolean (caddar lis) declared_list value_list)))))
       ;if the first word is "var" and there is more in this sublist than just the declaration
       ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list
@@ -196,14 +196,36 @@
       ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression)))) (M_boolean (list (get_element 0 expression) (get_element 1 expression)) (M_boolean (get_element 2 expression) declared_list value_list) declared_list value_list))
       ((list? (get_element 2 expression)) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
       ((eq? (car expression) '==) (equal (get_element 1 expression) (get_element 2 expression)))
+      ((eq? (car expression) '!=) (not (equal (get_element 1 expression) (get_element 2 expression))))
+      ((eq? (car expression) '<) (< (get_element 1 expression) (get_element 2 expression)))
+      ((eq? (car expression) '>) (> (get_element 1 expression) (get_element 2 expression)))
+      ((eq? (car expression) '<=) (<= (get_element 1 expression) (get_element 2 expression)))
+      ((eq? (car expression) '>=) (>= (get_element 1 expression) (get_element 2 expression)))
+      
     )))
 
 (define equal
   (lambda (left right)
     (cond
-      ((= left right) 'true)
-      (else 'false))))
+      ((= left right) #t)
+      (else #f))))
+
+(define lessthan
+  (lambda (left right)
+    (cond
+      ((< left right) #t)
+      (else #f))))
+
+
     
+(define truefalse_converter
+  (lambda (var)
+    (cond
+      ((eq? var 'true) #t)
+      ((eq? var #t) 'true)
+      ((eq? var 'false) #f)
+      ((eq? var #f) 'false)
+      )))
 
 (define M_state_lookup
   (lambda (var declared_list value_list)
