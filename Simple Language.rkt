@@ -33,6 +33,8 @@
       ((null? (car lis)) (display declared_list) (display value_list))
       ;if the first word is "var" and this sublist just has the declaration in it
       ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
+      ;if the first word is "var" and this sublist is a boolean
+      ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_boolean (caddar lis) declared_list value_list))))
       ;if the first word is "var" and there is more in this sublist than just the declaration
       ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list
@@ -136,6 +138,7 @@
       ;(else (0))
       )))
 
+
 (define do_op
   (lambda (op left right)
     (cond
@@ -182,6 +185,26 @@
     )))
 
 
+(define M_boolean
+  (lambda (expression declared_list value_list)
+    (cond
+      ((null? expression) false)
+      ;Checks if left side is a boolean equation or a integer and calcs it
+      ((and (list? (get_element 1 expression)) (boolean_operator? (car (get_element 1 expression)))) (M_boolean (list (get_element 0 expression) (M_boolean (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
+      ((list? (get_element 1 expression)) (M_boolean (list (get_element 0 expression) (M_integer (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
+      ; as above but for right side
+      ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression)))) (M_boolean (list (get_element 0 expression) (get_element 1 expression)) (M_boolean (get_element 2 expression) declared_list value_list) declared_list value_list))
+      ((list? (get_element 2 expression)) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
+      ((eq? (car expression) '==) (equal (get_element 1 expression) (get_element 2 expression)))
+    )))
+
+(define equal
+  (lambda (left right)
+    (cond
+      ((= left right) 'true)
+      (else 'false))))
+    
+
 (define M_state_lookup
   (lambda (var declared_list value_list)
     (cond
@@ -196,6 +219,13 @@
       ((null? lis) #f)
       ((eq? x (car lis)) #t)
       (else (member? x (cdr lis))))))
+
+(define boolean_operator?
+  (lambda (var)
+    (cond
+      ((member? var (list '== '!= '< '> '<= '>= '&& '|| '!)) #t)
+      (else #f)
+      )))
 
 (define get_element
   (lambda (index lis);first item = 0
