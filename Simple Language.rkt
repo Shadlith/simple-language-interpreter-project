@@ -22,34 +22,57 @@
   (lambda (filename)
     (define parsed (parse filename))
     (print parsed);just to see what it outputs
-    (evaluate parsed '() '())
+    (evaluate parsed '(return) '(null))
     ))
 
 (define evaluate
   (lambda (lis declared_list value_list)
     (cond
-      ((null? lis) (display declared_list) (display value_list))
-      ((null? (car lis)) (display declared_list) (display value_list))
+      ((null? lis) (display declared_list) (display value_list) (list declared_list value_list))
+      ((null? (car lis)) (display declared_list) (display value_list) (list declared_list value_list))
       ;if the first word is "var" and this sublist just has the declaration in it
-      ((and (eq? 'var (caar lis)) (eq? '() (cddar lis))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
+      ((and (eq? 'var (caar lis)) (eq? '() (cddar lis)))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
+
+      ((and (eq? 'var (caar lis)) (number? (get_element 2 (car lis))))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (get_element 2 (car lis)))))
       ;if the first word is "var" and this sublist is a boolean
-      ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (truefalse_converter (M_boolean (caddar lis) declared_list value_list)))))
+      ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis))))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (tf_to_truefalse (M_boolean (caddar lis) declared_list value_list)))))
       ;if the first word is "var" and there is more in this sublist than just the declaration
-      ((eq? 'var (caar lis)) (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (caddar lis) declared_list value_list))))
+      ((eq? 'var (caar lis))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and a boolean
-      ((and (and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (boolean_operator? (car (caddar lis)))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (truefalse_converter (M_boolean (caddar lis) declared_list value_list)))))
+      ((and (and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (boolean_operator? (car (caddar lis))))
+       (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (tf_to_truefalse (M_boolean (caddar lis) declared_list value_list)))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and not a boolean
-      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_integer (caddar lis) declared_list value_list))))
+      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis)))
+       (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_integer (caddar lis) declared_list value_list))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number
-      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (number? (caddar lis))) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (caddar lis))))
+      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (number? (caddar lis)))
+       (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (caddar lis))))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a variable
-      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (member? (caddar lis) declared_list)) (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list))))
+      ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (member? (caddar lis) declared_list))
+       (evaluate (cdr lis) declared_list (M_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list))))
       ;finish
   ;                                                                                  ^^^^
       ; Remy: (arrow from above) This line is really close, but we need a "M_state_remove_from_declared_list" function to run before this/the result of that be the input to the M_state_add_to_declared_list function  
       
       ; if the list starts with "if" and the condition next to it is true...then....not sure if the then part is correct. 
-      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list)) (evaluate (evaluate (caddr lis) declared_list value_list) declared_list value_list)) ; added on plane 
+      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list))
+       (evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list))))
+      ; if the list starts with "if", but the condition is not true and there is a 4th element. 
+      ((and (eq? 'if (caar lis)) (not(eq? '() (get_element 3 (car lis)))))
+       (evaluate (cdr lis) (evaluate (list (list (get_element 3 (car lis)))) declared_list value_list) (evaluate (list (get_element 3 (car lis))) declared_list value_list)))
+
+      ; if the list starts with "if", but the condition is not true
+      ((eq? 'if (caar lis)) (evaluate (cdr lis) declared_list value_list))
+
+      ((and (eq? 'while (caar lis)) (M_boolean (cadar lis) declared_list value_list))
+       (evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list))))
+      ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list value_list))
+
+      ((eq? 'return (caar lis)) (M_state_lookup 'return declared_list (M_modify_value_list declared_list value_list 'return (return_helper (cadar lis) declared_list value_list))))
 
       )))
 
@@ -185,7 +208,7 @@
   (lambda (left right)
     (cond
       ((or (null? left) (null? right)) 0)
-      (else (mod left right))
+      (else (remainder left right))
     )))
 
 
@@ -193,12 +216,17 @@
   (lambda (expression declared_list value_list)
     (cond
       ((null? expression) false)
+      ((boolean? expression) expression)
       ;Checks if left side is a boolean equation or a integer and calcs it
       ((and (list? (get_element 1 expression)) (boolean_operator? (car (get_element 1 expression)))) (M_boolean (list (get_element 0 expression) (M_boolean (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
       ((list? (get_element 1 expression)) (M_boolean (list (get_element 0 expression) (M_integer (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
       ; as above but for right side
-      ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression)))) (M_boolean (list (get_element 0 expression) (get_element 1 expression)) (M_boolean (get_element 2 expression) declared_list value_list) declared_list value_list))
+      ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression)))) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_boolean (get_element 2 expression) declared_list value_list)) declared_list value_list))
       ((list? (get_element 2 expression)) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_integer (get_element 2 expression) declared_list value_list)) declared_list value_list))
+
+      ((eq? (car expression) '&&) (tf_to_hashtags (and (truth_finder (get_element 1 expression) declared_list value_list) (truth_finder (get_element 2 expression) declared_list value_list))))
+      ((eq? (car expression) '||) (tf_to_hashtags (or (truth_finder (get_element 1 expression) declared_list value_list) (truth_finder (get_element 2 expression) declared_list value_list))))
+
       ; if the left or right element is not a number, look up the value of the variable. 
       ((not(number? (get_element 1 expression))) (M_boolean (list (get_element 0 expression) (M_state_lookup (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list));added on plane
       ((not(number? (get_element 2 expression))) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_state_lookup (get_element 2 expression) declared_list value_list) ) declared_list value_list));added on plane
@@ -210,8 +238,19 @@
       ((eq? (car expression) '>) (> (get_element 1 expression) (get_element 2 expression)))
       ((eq? (car expression) '<=) (<= (get_element 1 expression) (get_element 2 expression)))
       ((eq? (car expression) '>=) (>= (get_element 1 expression) (get_element 2 expression)))
+
+      
       
     )))
+
+(define truth_finder
+  (lambda (var declared_list value_list)
+    (cond
+      ((null? var) #f)
+      ((boolean? var) var)
+      ((member? var declared_list) (tf_to_hashtags(M_state_lookup var declared_list value_list)))
+      (else (error "variable not initialized"))
+      )))
 
 (define equal
   (lambda (left right)
@@ -236,12 +275,39 @@
       ((eq? var #f) 'false)
       )))
 
+(define tf_to_truefalse
+  (lambda (var)
+    (cond
+      ((eq? var 'true) 'true)
+      ((eq? var #t) 'true)
+      ((eq? var 'false) 'false)
+      ((eq? var #f) 'false)
+      )))
+
+(define tf_to_hashtags
+  (lambda (var)
+    (cond
+      ((eq? var 'true) #t)
+      ((eq? var #t) #t)
+      ((eq? var 'false) #f)
+      ((eq? var #f) #f)
+      )))
+
 (define M_state_lookup
   (lambda (var declared_list value_list)
     (cond
       ((null? declared_list) '())
-      ((eq? var (car declared_list)) (car value_list));Remy: this line is currently not working and is causing an infinite loop. maybe the cars/cdrs are wrong, but this should be matching on the first iteration through for "x=10". 
+      ((eq? var (car declared_list)) (variable_type?(car value_list)))
       (else (M_state_lookup var (cdr declared_list) (cdr value_list)))
+      )))
+
+(define variable_type?
+  (lambda var
+    (cond
+      ((null? (car var)) '())
+      ((number? (car var)) (car var))
+      ((or (eq? 'true (car var)) (eq? 'false (car var))) (tf_to_hashtags (car var)))
+      (else (error "variable not initialized"))
       )))
 
 (define member?
@@ -265,3 +331,15 @@
       ((eq? index 0) (car lis))
       (else (get_element (- index 1) (cdr lis)))
       )))
+
+
+    ;(if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1)))))
+(define return_helper
+  (lambda (var declared_list value_list)
+    (cond
+      ((null? var) 'null)
+      ((number? var) var)
+      ((member? var declared_list) (M_state_lookup var declared_list value_list))  
+      ((boolean_operator? (car var)) (M_boolean var declared_list value_list))
+      (else (M_integer var declared_list value_list))
+       )))
