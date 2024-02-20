@@ -325,5 +325,3 @@
       ((boolean_operator? (car var)) (M_boolean var declared_list value_list))
       (else (M_value var declared_list value_list))
        )))
-
-(interpret "fileToParse.txt")
