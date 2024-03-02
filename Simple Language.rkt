@@ -17,7 +17,8 @@
   (lambda (filename)
     (define parsed (parse filename))
     (print parsed);just to see what it outputs
-    (evaluate parsed '(return) '(null))
+    (call/cc (lambda (break)
+               (evaluate parsed '(return) '(null) break)))
     ))
 
 
@@ -32,40 +33,40 @@
 ;((var x) (= x 10) (var y (+ (* 3 x) 5)) (while (!= (% y x) 3)
 ; (= y (+ y 1))) (if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1))))))
 (define evaluate
-  (lambda (lis declared_list value_list)
+  (lambda (lis declared_list value_list break)
     (cond
       ((null? lis) (list declared_list value_list))
       ((null? (car lis)) (list declared_list value_list))
       ;if the first word is "var" and this sublist just has the declaration in it (ex: var x)
       ((and (eq? 'var (caar lis)) (eq? '() (cddar lis)))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error")))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error") break))
       ;if the first word is "var" and the right is a number (ex: var x = 10)
       ((and (eq? 'var (caar lis)) (number? (get_element 2 (car lis))))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (get_element 2 (car lis)))))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (get_element 2 (car lis))) break))
       ; if the first word is var and the 3rd element is a variable. (ex: var x = y (and y is declared)) 
       ((and (eq? 'var (caar lis)) (member? (get_element 2 (car lis)) declared_list))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_state_lookup(get_element 2 (car lis)) declared_list value_list))))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_state_lookup(get_element 2 (car lis)) declared_list value_list)) break))
       ; if the first word is var and the 3rd element is a variable and its not in the member list (didn't finish this line...)
       ;((and (eq? 'var (caar lis)) (member? (get_element 2 (car lis)) declared_list))
       ;if the first word is "var" and this sublist is a boolean. ex: var x = a && b
       ((and (eq? 'var (caar lis)) (boolean_operator? (car (caddar lis))))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list)))))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) break))
       ;if the first word is "var" and there is more in this sublist than just the declaration aka our first word is var and it's not of the others ex: var x = 5+7
       ((eq? 'var (caar lis))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_value (caddar lis) declared_list value_list))))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_value (caddar lis) declared_list value_list)) break))
 
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and a boolean ex: x = a && b
       ((and (and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis))) (boolean_operator? (car (caddar lis))))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list)))))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) break))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and not a boolean ex: x = 5+7
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (list? (caddar lis)))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_value (caddar lis) declared_list value_list))))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_value (caddar lis) declared_list value_list)) break))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number ex: x = 5
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (number? (caddar lis)))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (caddar lis))))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (caddar lis)) break))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a variable ex: x = y
       ((and (and (eq? '= (caar lis)) (member? (cadar lis) declared_list)) (member? (caddar lis) declared_list))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list))))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list)) break))
       ; if it's an assignment statement and gets to this line, it's not in the declared list and should fail. 
       ((eq? '= (caar lis)) (error "our version of variable not initialized"))
       
@@ -74,36 +75,50 @@
        ;(evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list))))
       
       ; if the list starts with "if" and the condition next to it is true...then evalute it (we think this one is right) 
-      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list)) (display "bob ") (display (evaluate (list (get_element 2 (car lis))) declared_list value_list))
-       (evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list))))
+      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list)) (newline) (display "if and run condition is true: ") (display (evaluate (list (get_element 2 (car lis))) declared_list value_list break))
+       (evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
       ; if the condition is not true, the list has 4 elements and it starts with an "if"
       ((and (eq? (length (car lis)) 4) (eq? 'if (caar lis)))
-       (evaluate (cdr lis) (car (evaluate (list (get_element 3 (car lis))) declared_list value_list)) (cadr (evaluate (list (get_element 3 (car lis))) declared_list value_list))))
+       (evaluate (cdr lis) (car (evaluate (list (get_element 3 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 3 (car lis))) declared_list value_list break)) break))
 
       ; if the list starts with "if", but the condition is not true and there is a 4th element. 
      ; ((and (eq? 'if (caar lis)) (not(eq? '() (get_element 3 (car lis)))))
        ;(evaluate (cdr lis) (evaluate (list (list (get_element 3 (car lis)))) declared_list value_list) (evaluate (list (get_element 3 (car lis))) declared_list value_list)))
 
       ; if the list starts with "if", but the condition is not true
-      ((eq? 'if (caar lis)) (evaluate (cdr lis) declared_list value_list))
+      ((eq? 'if (caar lis)) (evaluate (cdr lis) declared_list value_list break))
 
       ((and (eq? 'while (caar lis)) (M_boolean (cadar lis) declared_list value_list))
-       (evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list))))
-      ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list value_list))
+       (evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+      ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list value_list break))
 
       ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
-       (newline) (display (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
+       (newline) (display "return boolean: ") (display (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
        (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
 
-      ((and (eq? 'return (caar lis)) (number? (cadar lis))) (display "tom ") (display (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
-       (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))
-      
-      ((eq? 'return (caar lis)) (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+      ((and (eq? 'return (caar lis)) (number? (cadar lis))) (newline) (display "return number: ") (display (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+        (break (cadar lis)))
+        ;(M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))
 
+      ; if it's a return and an expression in after the return
+      ((and (eq? 'return (caar lis)) (operator? (caadar lis))) (newline) (display "return expression: ") (break (M_value (cadar lis) declared_list value_list))) 
+      
+      ((eq? 'return (caar lis)) (newline) (display "return variable or expression: ") (newline) (display (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+       (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+
+      ; if it starts with "begin"....we think we do this. THIS IS NOT DONE.....need to figure out boxes. Need to have things added to declared list on the top row. 
+      ((eq? 'begin (caar lis)) (evaluate (cdr lis) (car (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) ("do something to value_list") break))
+                                         (cdr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) ("do something to value_list") break) break)))
+      
       )))
 
 ;((var x) (= x 10) (var y (+ (* 3 x) 5)) (while (!= (% y x) 3)
 ; (= y (+ y 1))) (if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1))))))
+
+(define M_state_add_row_to_declared_list
+  (lambda declared_list (newline) (display "updated declared list: " (cons '() declared_list))
+    (cons '() declared_list)
+    ))
 
 (define M_state_add_to_declared_list
   (lambda (declared_list var)
@@ -327,6 +342,13 @@
   (lambda (var)
     (cond
       ((member? var (list '== '!= '< '> '<= '>= '&& '|| '!)) #t)
+      (else #f)
+      )))
+
+(define operator?
+  (lambda (var)
+    (cond
+      ((member? var (list '+ '- '* '/ '%)) #t)
       (else #f)
       )))
 
