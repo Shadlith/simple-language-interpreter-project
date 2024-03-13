@@ -18,7 +18,7 @@
     (define parsed (parse filename))
     (print parsed);just to see what it outputs
     (call/cc (lambda (break)
-               (evaluate parsed '(return) '(null) break)))
+               (evaluate parsed (list(list(box 'return))) (list(list(box 'null))) break)))
     ))
 
 
@@ -112,17 +112,31 @@
       
       )))
 
-;((var x) (= x 10) (var y (+ (* 3 x) 5)) (while (!= (% y x) 3)
-; (= y (+ y 1))) (if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1))))))
+;'((var x 10) (begin (var y 2) (var z (* x y)) (= x z)) (return x))
 
 (define M_state_add_row_to_declared_list
   (lambda declared_list (newline) (display "updated declared list: " (cons '() declared_list))
     (cons '() declared_list)
     ))
 
+(define M_state_add_row_to_value_list
+  (lambda value_list (newline) (display "updated value list: " (cons '() value_list))
+    (cons '() value_list)
+    ))
+
 (define M_state_add_to_declared_list
   (lambda (declared_list var)
-    (cons var declared_list)
+    (cons (box var) (car declared_list))
+    ))
+
+(define M_state_remove_top_layer_declared_list
+  (lambda (declared_list)
+    (cdr declared_list)
+    ))
+
+(define M_state_remove_top_layer_value_list
+  (lambda (value_list)
+    (cdr value_list)
     ))
 
 (define M_state_add_to_value_list
@@ -130,7 +144,7 @@
     (cond
       ;((not(or (or (number? val) (eq? 'true val)) (eq? 'false val))) (error "our version of variable not initialized"))
       ((list? val) (error "our version of variable not initialized"))
-      (else (cons val value_list))
+      (else (cons (box val) (car value_list)))
        )))
 
 ;if the variable is already in the declared-list, then this changes the value in the value list.
@@ -138,9 +152,23 @@
   (lambda (declared_list value_list var newval)
     (cond
       ((null? declared_list) (error "our version of variable not initialized"))
-      ((eq? var (car declared_list)) (cons newval (cdr value_list)))
+      ((and (list? (car declared_list)) (member? var (car declared_list))) (M_state_modify_value_list (car declared_list) (car value_list) var newval))
+      ((list? (car declared_list)) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval))
+      ; 3-12: This eq line is where we have an issue.....both don't work
+      ;((eq? var (unbox (car declared_list))) (cons (box newval) (cdr value_list))) 
+      ;((eq? var (unbox (car declared_list))) (begin (set-box! (car value_list) newval) value_list))
       (else (cons (car value_list) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval)))
     )))
+
+(define M_state_lookup
+  (lambda (var declared_list value_list)
+    (cond
+      ((null? declared_list) '())
+      ((and (list? (car declared_list)) (member? var (car declared_list))) (M_state_lookup var (car declared_list) (car value_list)))
+      ((list? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
+      ((eq? var (unbox (car declared_list))) (variable_type?(unbox (car value_list))))
+      (else (M_state_lookup var (cdr declared_list) (cdr value_list)))
+      )))
 
 (define M_value
   (lambda (expression declared_list value_list)
@@ -313,13 +341,7 @@
       ((eq? var #f) #f)
       )))
 
-(define M_state_lookup
-  (lambda (var declared_list value_list)
-    (cond
-      ((null? declared_list) '())
-      ((eq? var (car declared_list)) (variable_type?(car value_list)))
-      (else (M_state_lookup var (cdr declared_list) (cdr value_list)))
-      )))
+
 
 (define variable_type?
   (lambda var
@@ -335,6 +357,7 @@
   (lambda (x lis)
     (cond
       ((null? lis) #f)
+      ((and (box? (car lis)) (eq? x (unbox (car lis)))) #t) 
       ((eq? x (car lis)) #t)
       (else (member? x (cdr lis))))))
 
@@ -379,4 +402,12 @@
       (else (M_value var declared_list value_list))
        )))
 
-(interpret "fileToParse.txt")
+
+;(interpret "fileToParse.txt")
+; These below are unit tests of Part 1
+(interpret "Unit Tests/fileToParseTest1-1.txt")
+(interpret "Unit Tests/fileToParseTest1-2.txt")
+(interpret "Unit Tests/fileToParseTest1-3.txt")
+(interpret "Unit Tests/fileToParseTest1-4.txt")
+(interpret "Unit Tests/fileToParseTest1-5.txt")
+(interpret "Unit Tests/fileToParseTest1-6.txt")
