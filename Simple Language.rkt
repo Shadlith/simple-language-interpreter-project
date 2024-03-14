@@ -100,33 +100,35 @@
         (break (cadar lis)))
         ;(M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))
 
-      ; if it's a return and an expression in after the return
-      ((and (eq? 'return (caar lis)) (operator? (caadar lis))) (newline) (display "return expression: ") (break (M_value (cadar lis) declared_list value_list))) 
+      ; if it's a return and an expression in after the return (we think this is unnecessary for Part 1 and is taken care of in the next chunk)
+      ;((and (eq? 'return (caar lis)) (operator? (caadar lis))) (newline) (display "return expression: ") (break (M_value (cadar lis) declared_list value_list))) 
       
       ((eq? 'return (caar lis)) (newline) (display "return variable or expression: ") (newline) (display (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
        (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
 
-      ; if it starts with "begin"....we think we do this. THIS IS NOT DONE.....need to figure out boxes. Need to have things added to declared list on the top row. 
-      ((eq? 'begin (caar lis)) (evaluate (cdr lis) (car (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) ("do something to value_list") break))
-                                         (cdr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) ("do something to value_list") break) break)))
+      ; if it starts with "begin"....we think we do this. THIS IS NOT DONE.....need to figure out boxes. Need to have things added to declared list on the top row.
+      ; 3-14: We need to do the "remove top layer" for value list once the "begin" sublist has ended. Worried about nested begins. 
+      ; Actually think we're never going to remove the top layer from the declared list? Maybe. 
+      ((eq? 'begin (caar lis)) (evaluate (cdr lis) declared_list
+                                         (cdr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) break)) break))
       
       )))
 
 ;'((var x 10) (begin (var y 2) (var z (* x y)) (= x z)) (return x))
 
 (define M_state_add_row_to_declared_list
-  (lambda declared_list (newline) (display "updated declared list: " (cons '() declared_list))
-    (cons '() declared_list)
+  (lambda declared_list (newline) (display "updated declared list: ") (display (cons '() (car declared_list)))
+    (cons '() (car declared_list))
     ))
 
 (define M_state_add_row_to_value_list
-  (lambda value_list (newline) (display "updated value list: " (cons '() value_list))
-    (cons '() value_list)
+  (lambda value_list (newline) (display "updated value list: ") (display (cons '() (car value_list)))
+    (cons '() (car value_list))
     ))
 
 (define M_state_add_to_declared_list
   (lambda (declared_list var)
-    (cons (box var) (car declared_list))
+    (cons (cons (box var) (car declared_list)) (cdr declared_list))
     ))
 
 (define M_state_remove_top_layer_declared_list
@@ -143,8 +145,8 @@
   (lambda (value_list val)
     (cond
       ;((not(or (or (number? val) (eq? 'true val)) (eq? 'false val))) (error "our version of variable not initialized"))
-      ((list? val) (error "our version of variable not initialized"))
-      (else (cons (box val) (car value_list)))
+      ((list? val) (error "val is a list for some reason"))
+      (else (cons (cons (box val) (car value_list)) (cdr value_list)))
        )))
 
 ;if the variable is already in the declared-list, then this changes the value in the value list.
@@ -152,10 +154,11 @@
   (lambda (declared_list value_list var newval)
     (cond
       ((null? declared_list) (error "our version of variable not initialized"))
-      ((and (list? (car declared_list)) (member? var (car declared_list))) (M_state_modify_value_list (car declared_list) (car value_list) var newval))
+      ((and (list? (car declared_list)) (member? var (car declared_list))) (cons (M_state_modify_value_list (car declared_list) (car value_list) var newval) (cdr value_list)))
       ((list? (car declared_list)) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval))
       ; 3-12: This eq line is where we have an issue.....both don't work
-      ;((eq? var (unbox (car declared_list))) (cons (box newval) (cdr value_list))) 
+      ((eq? var (unbox (car declared_list))) (cons (box newval) (cdr value_list)))
+      ; the set-box! works.....except for the last test of Part 1.....so, we're not going to do it (for now)
       ;((eq? var (unbox (car declared_list))) (begin (set-box! (car value_list) newval) value_list))
       (else (cons (car value_list) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval)))
     )))
@@ -357,6 +360,7 @@
   (lambda (x lis)
     (cond
       ((null? lis) #f)
+      ((list? (car lis)) (or (member? x (car lis)) (member? x (cdr lis))))
       ((and (box? (car lis)) (eq? x (unbox (car lis)))) #t) 
       ((eq? x (car lis)) #t)
       (else (member? x (cdr lis))))))
@@ -402,12 +406,28 @@
       (else (M_value var declared_list value_list))
        )))
 
-
-;(interpret "fileToParse.txt")
+(interpret "fileToParse.txt")
 ; These below are unit tests of Part 1
+#|
 (interpret "Unit Tests/fileToParseTest1-1.txt")
 (interpret "Unit Tests/fileToParseTest1-2.txt")
 (interpret "Unit Tests/fileToParseTest1-3.txt")
 (interpret "Unit Tests/fileToParseTest1-4.txt")
 (interpret "Unit Tests/fileToParseTest1-5.txt")
 (interpret "Unit Tests/fileToParseTest1-6.txt")
+(interpret "Unit Tests/fileToParseTest1-7.txt")
+(interpret "Unit Tests/fileToParseTest1-8.txt")
+(interpret "Unit Tests/fileToParseTest1-9.txt")
+(interpret "Unit Tests/fileToParseTest1-10.txt")
+;test 11,12,13 should fail
+;(interpret "Unit Tests/fileToParseTest1-11.txt")
+;(interpret "Unit Tests/fileToParseTest1-12.txt")
+;(interpret "Unit Tests/fileToParseTest1-13.txt")
+(interpret "Unit Tests/fileToParseTest1-14.txt")
+(interpret "Unit Tests/fileToParseTest1-15.txt")
+(interpret "Unit Tests/fileToParseTest1-16.txt")
+(interpret "Unit Tests/fileToParseTest1-17.txt")
+(interpret "Unit Tests/fileToParseTest1-18.txt")
+(interpret "Unit Tests/fileToParseTest1-19.txt")
+(interpret "Unit Tests/fileToParseTest1-20.txt")
+|#
