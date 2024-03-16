@@ -88,8 +88,12 @@
       ; if the list starts with "if", but the condition is not true
       ((eq? 'if (caar lis)) (evaluate (cdr lis) declared_list value_list break))
 
+      ; when it's a "while" and the condition is true
       ((and (eq? 'while (caar lis)) (M_boolean (cadar lis) declared_list value_list))
-       (evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+       ;(evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+       (evaluate lis (M_state_add_row_to_declared_list declared_list) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+
+      ;when it's a "while" and by default, the boolean is false. 
       ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list value_list break))
 
       ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
@@ -110,7 +114,7 @@
       ; 3-14: We need to do the "remove top layer" for value list once the "begin" sublist has ended. Worried about nested begins. 
       ; Actually think we're never going to remove the top layer from the declared list? Maybe. 
       ((eq? 'begin (caar lis)) (evaluate (cdr lis) declared_list
-                                         (cdr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) break)) break))
+                                         (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) break)) break))
       
       )))
 
@@ -155,7 +159,7 @@
     (cond
       ((null? declared_list) (error "our version of variable not initialized"))
       ((and (list? (car declared_list)) (member? var (car declared_list))) (cons (M_state_modify_value_list (car declared_list) (car value_list) var newval) (cdr value_list)))
-      ((list? (car declared_list)) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval))
+      ((list? (car declared_list)) (cons (car value_list) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval)))
       ; 3-12: This eq line is where we have an issue.....both don't work
       ((eq? var (unbox (car declared_list))) (cons (box newval) (cdr value_list)))
       ; the set-box! works.....except for the last test of Part 1.....so, we're not going to do it (for now)
@@ -167,7 +171,8 @@
   (lambda (var declared_list value_list)
     (cond
       ((null? declared_list) '())
-      ((and (list? (car declared_list)) (member? var (car declared_list))) (M_state_lookup var (car declared_list) (car value_list)))
+      ;((null? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
+      ((and (and (list? (car declared_list)) (member? var (car declared_list))) (not(null? (car declared_list)))) (M_state_lookup var (car declared_list) (car value_list)))
       ((list? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
       ((eq? var (unbox (car declared_list))) (variable_type?(unbox (car value_list))))
       (else (M_state_lookup var (cdr declared_list) (cdr value_list)))
@@ -345,7 +350,7 @@
       )))
 
 
-
+; variable_type tells us if the variable is declared or not. If it's 'true' or 'false' it converts it to a hashtag
 (define variable_type?
   (lambda var
     (cond
@@ -406,28 +411,30 @@
       (else (M_value var declared_list value_list))
        )))
 
-(interpret "fileToParse.txt")
+(eq? (interpret "Unit Tests/fileToParseTest2-1.txt") 20)
+(eq? (interpret "Unit Tests/fileToParseTest2-2.txt") 164)
 ; These below are unit tests of Part 1
+; Note that the ones that end in "true" or "false" aren't returning #t correctly
 #|
-(interpret "Unit Tests/fileToParseTest1-1.txt")
-(interpret "Unit Tests/fileToParseTest1-2.txt")
-(interpret "Unit Tests/fileToParseTest1-3.txt")
-(interpret "Unit Tests/fileToParseTest1-4.txt")
-(interpret "Unit Tests/fileToParseTest1-5.txt")
-(interpret "Unit Tests/fileToParseTest1-6.txt")
-(interpret "Unit Tests/fileToParseTest1-7.txt")
-(interpret "Unit Tests/fileToParseTest1-8.txt")
-(interpret "Unit Tests/fileToParseTest1-9.txt")
-(interpret "Unit Tests/fileToParseTest1-10.txt")
+(eq? (interpret "Unit Tests/fileToParseTest1-1.txt") 150)
+(eq? (interpret "Unit Tests/fileToParseTest1-2.txt") -4)
+(eq? (interpret "Unit Tests/fileToParseTest1-3.txt") 10)
+(eq? (interpret "Unit Tests/fileToParseTest1-4.txt") 16)
+(eq? (interpret "Unit Tests/fileToParseTest1-5.txt") 220)
+(eq? (interpret "Unit Tests/fileToParseTest1-6.txt") 5)
+(eq? (interpret "Unit Tests/fileToParseTest1-7.txt") 6)
+(eq? (interpret "Unit Tests/fileToParseTest1-8.txt") 10)
+(eq? (interpret "Unit Tests/fileToParseTest1-9.txt") 5)
+(eq? (interpret "Unit Tests/fileToParseTest1-10.txt") -39)
 ;test 11,12,13 should fail
 ;(interpret "Unit Tests/fileToParseTest1-11.txt")
 ;(interpret "Unit Tests/fileToParseTest1-12.txt")
 ;(interpret "Unit Tests/fileToParseTest1-13.txt")
-(interpret "Unit Tests/fileToParseTest1-14.txt")
-(interpret "Unit Tests/fileToParseTest1-15.txt")
-(interpret "Unit Tests/fileToParseTest1-16.txt")
-(interpret "Unit Tests/fileToParseTest1-17.txt")
-(interpret "Unit Tests/fileToParseTest1-18.txt")
-(interpret "Unit Tests/fileToParseTest1-19.txt")
-(interpret "Unit Tests/fileToParseTest1-20.txt")
+(eq? (interpret "Unit Tests/fileToParseTest1-14.txt") 30)
+(eq? (interpret "Unit Tests/fileToParseTest1-15.txt") "true")
+(eq? (interpret "Unit Tests/fileToParseTest1-16.txt") 100)
+(eq? (interpret "Unit Tests/fileToParseTest1-17.txt") "false")
+(eq? (interpret "Unit Tests/fileToParseTest1-18.txt") "true")
+(eq? (interpret "Unit Tests/fileToParseTest1-19.txt") 128)
+(eq? (interpret "Unit Tests/fileToParseTest1-20.txt") 12)
 |#
