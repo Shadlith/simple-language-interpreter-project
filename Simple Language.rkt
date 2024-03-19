@@ -92,16 +92,18 @@
 
       ; when it's a "while" and the condition is true
       ((and (eq? 'while (caar lis)) (M_boolean (cadar lis) declared_list value_list))
-       ;(evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
-       ;(evaluate lis (M_state_add_row_to_declared_list declared_list) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
-       (evaluate lis declared_list (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+       ;(evaluate (cdr lis) declared_list (M_state_remove_top_layer_value_list (cadr (call/cc (lambda (sub_break) (M_state_whileH lis declared_list value_list sub_break))))) break))
+      ;(evaluate (cdr lis) declared_list (cadr (call/cc (lambda (sub_break) (M_state_whileH lis declared_list value_list sub_break)))) break))
+      ;((and (eq? 'while (caar lis)) (M_boolean (cadar lis) declared_list value_list))
+       (call/cc (lambda (sub_break) (evaluate lis declared_list (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break) sub_break)))
+      ;(call/cc (lambda (sub_break) (evaluate lis declared_list (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list sub_break)) sub_break) sub_break)))
 
       ;when it's a "while" and by default, the boolean is false. 
       ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list value_list break))
 
       ; when it's return and a boolean, this gets it to be "true" or "false"
       ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
-       (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))))
+       (break (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))))
 
       ((and (eq? 'return (caar lis)) (number? (cadar lis)))
         (break (cadar lis)))
@@ -111,17 +113,35 @@
       ;((and (eq? 'return (caar lis)) (operator? (caadar lis))) (newline) (display "return expression: ") (break (M_value (cadar lis) declared_list value_list))) 
       
       ((eq? 'return (caar lis))
-       (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+       (break (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
 
       ; if it starts with "begin"....we think we do this. THIS IS NOT DONE.....need to figure out boxes. Need to have things added to declared list on the top row.
       ; 3-14: We need to do the "remove top layer" for value list once the "begin" sublist has ended. Worried about nested begins. 
       ; Actually think we're never going to remove the top layer from the declared list? Maybe. 
       ((eq? 'begin (caar lis)) (evaluate (cdr lis) declared_list
                                          (M_state_remove_top_layer_value_list (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) break))) break))
-      
+
+      ((eq? 'continue (caar lis))(evaluate '() declared_list value_list break))
+
+      ((eq? 'break (caar lis))(evaluate (cdr lis) declared_list (M_state_remove_top_layer_value_list (cdr (break (evaluate '() declared_list value_list break)))) break)) 
       )))
 
 ;'((var x 10) (begin (var y 2) (var z (* x y)) (= x z)) (return x))
+
+#|
+(define continueH
+  (lambda lis
+    (cond
+      ((null? lis) '())
+      ((
+|#
+
+(define M_state_whileH
+  (lambda (lis declared_list value_list sub_break)
+    ;(evaluate lis declared_list (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list sub_break)) sub_break)
+    (evaluate (list (get_element 2 (car lis))) declared_list value_list sub_break)
+    ))
+
 
 (define M_state_add_row_to_declared_list
   (lambda declared_list (newline) (display "updated declared list: ") (display (cons '() (car declared_list))) (newline)
@@ -415,15 +435,27 @@
       (else (error "invalid return"))
        )))
 
-#|
-(eq? (interpret "Unit Tests/fileToParseTest2-1.txt") 20)
-(eq? (interpret "Unit Tests/fileToParseTest2-2.txt") 164)
-(eq? (interpret "Unit Tests/fileToParseTest2-3.txt") 32)
-(eq? (interpret "Unit Tests/fileToParseTest2-4.txt") 2)
+(define tests
+  (lambda x
+      (cond
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-1.txt") 20)) (error "Test 2-1 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-2.txt") 164)) (error "Test 2-2 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-3.txt") 32)) (error "Test 2-3 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-4.txt") 2)) (error "Test 2-4 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-6.txt") 25)) (error "Test 2-6 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-7.txt") 21)) (error "Test 2-7 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-8.txt") 6)) (error "Test 2-8 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-9.txt") -1)) (error "Test 2-9 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest2-10.txt") 789)) (error "Test 2-10 failed"))
+        (display "all tests passed")
+        )))
+
+;(interpret "Unit Tests/fileToParseTest2-9.txt")
+;(tests)
 ;(interpret "Unit Tests/fileToParseTest2-5.txt")
-(eq? (interpret "Unit Tests/fileToParseTest2-6.txt") 25)
-|#
-(eq? (interpret "Unit Tests/fileToParseTest2-7.txt") 21)
+;(interpret "Unit Tests/fileToParseTest2-10.txt")
+;(interpret "Unit Tests/fileToParseTest2-11.txt")
+
 ; These below are unit tests of Part 1
 ; Note that the ones that end in "true" or "false" aren't returning #t correctly
 #|
