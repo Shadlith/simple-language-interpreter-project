@@ -34,6 +34,8 @@
 ; (= y (+ y 1))) (if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1))))))
 (define evaluate
   (lambda (lis declared_list value_list break)
+    (newline) (display "declared list at top of evaluate") (display declared_list)
+    (newline) (display "value list at top of evaluate") (display value_list)
     (cond
       ((null? lis) (list declared_list value_list))
       ((null? (car lis)) (list declared_list value_list))
@@ -75,7 +77,7 @@
        ;(evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list))))
       
       ; if the list starts with "if" and the condition next to it is true...then evalute it (we think this one is right) 
-      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list)) (newline) (display "if and run condition is true: ") (display (evaluate (list (get_element 2 (car lis))) declared_list value_list break))
+      ((and (eq? 'if (caar lis)) (M_boolean (cadar lis) declared_list value_list)) (newline)
        (evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
       ; if the condition is not true, the list has 4 elements and it starts with an "if"
       ((and (eq? (length (car lis)) 4) (eq? 'if (caar lis)))
@@ -91,42 +93,43 @@
       ; when it's a "while" and the condition is true
       ((and (eq? 'while (caar lis)) (M_boolean (cadar lis) declared_list value_list))
        ;(evaluate lis (car (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
-       (evaluate lis (M_state_add_row_to_declared_list declared_list) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+       ;(evaluate lis (M_state_add_row_to_declared_list declared_list) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
+       (evaluate lis declared_list (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list break)) break))
 
       ;when it's a "while" and by default, the boolean is false. 
       ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list value_list break))
 
-      ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
-       (newline) (display "return boolean: ") (display (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
-       (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))))
+      ; when it's return and a boolean, this gets it to be "true" or "false"
+      ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+       (M_boolean_truefalse_converter(M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))))
 
-      ((and (eq? 'return (caar lis)) (number? (cadar lis))) (newline) (display "return number: ") (display (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+      ((and (eq? 'return (caar lis)) (number? (cadar lis)))
         (break (cadar lis)))
         ;(M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list)))
 
       ; if it's a return and an expression in after the return (we think this is unnecessary for Part 1 and is taken care of in the next chunk)
       ;((and (eq? 'return (caar lis)) (operator? (caadar lis))) (newline) (display "return expression: ") (break (M_value (cadar lis) declared_list value_list))) 
       
-      ((eq? 'return (caar lis)) (newline) (display "return variable or expression: ") (newline) (display (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
+      ((eq? 'return (caar lis))
        (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
 
       ; if it starts with "begin"....we think we do this. THIS IS NOT DONE.....need to figure out boxes. Need to have things added to declared list on the top row.
       ; 3-14: We need to do the "remove top layer" for value list once the "begin" sublist has ended. Worried about nested begins. 
       ; Actually think we're never going to remove the top layer from the declared list? Maybe. 
       ((eq? 'begin (caar lis)) (evaluate (cdr lis) declared_list
-                                         (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) break)) break))
+                                         (M_state_remove_top_layer_value_list (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) break))) break))
       
       )))
 
 ;'((var x 10) (begin (var y 2) (var z (* x y)) (= x z)) (return x))
 
 (define M_state_add_row_to_declared_list
-  (lambda declared_list (newline) (display "updated declared list: ") (display (cons '() (car declared_list)))
+  (lambda declared_list (newline) (display "updated declared list: ") (display (cons '() (car declared_list))) (newline)
     (cons '() (car declared_list))
     ))
 
 (define M_state_add_row_to_value_list
-  (lambda value_list (newline) (display "updated value list: ") (display (cons '() (car value_list)))
+  (lambda value_list (newline) (display "updated value list: ") (display (cons '() (car value_list))) (newline)
     (cons '() (car value_list))
     ))
 
@@ -170,7 +173,7 @@
 (define M_state_lookup
   (lambda (var declared_list value_list)
     (cond
-      ((null? declared_list) '())
+      ((null? declared_list) (error "variable not found"))
       ;((null? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
       ((and (and (list? (car declared_list)) (member? var (car declared_list))) (not(null? (car declared_list)))) (M_state_lookup var (car declared_list) (car value_list)))
       ((list? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
@@ -407,12 +410,20 @@
       ((null? var) 'null)
       ((number? var) var)
       ((member? var declared_list) (M_state_lookup var declared_list value_list))  
-      ((boolean_operator? (car var)) (M_boolean var declared_list value_list))
-      (else (M_value var declared_list value_list))
+      ((and (list? var) (boolean_operator? (car var))) (M_boolean var declared_list value_list))
+      ((list? var) (M_value var declared_list value_list))
+      (else (error "invalid return"))
        )))
 
+#|
 (eq? (interpret "Unit Tests/fileToParseTest2-1.txt") 20)
 (eq? (interpret "Unit Tests/fileToParseTest2-2.txt") 164)
+(eq? (interpret "Unit Tests/fileToParseTest2-3.txt") 32)
+(eq? (interpret "Unit Tests/fileToParseTest2-4.txt") 2)
+;(interpret "Unit Tests/fileToParseTest2-5.txt")
+(eq? (interpret "Unit Tests/fileToParseTest2-6.txt") 25)
+|#
+(eq? (interpret "Unit Tests/fileToParseTest2-7.txt") 21)
 ; These below are unit tests of Part 1
 ; Note that the ones that end in "true" or "false" aren't returning #t correctly
 #|
