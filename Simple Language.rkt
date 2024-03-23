@@ -58,12 +58,12 @@
 
       
       ((eq? 'begin (caar lis)) (evaluate (cdr lis) declared_list
-                                         (M_state_remove_top_layer_value_list (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) return break try throw catch finally)))
+                                         (M_state_sync_value_list declared_list (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) return break try throw catch finally)))
                                          return break try throw catch finally))
 
       ((eq? 'continue (caar lis))(evaluate '() declared_list value_list return break try throw catch finally))
 
-      ((eq? 'break (caar lis))(break (list declared_list (M_state_remove_top_layer_value_list value_list))))
+      ((eq? 'break (caar lis))(break (list declared_list (M_state_sync_value_list declared_list value_list))))
 
       ((and (and (eq? 'try (caar lis)) (null? (get_element 3 (car lis))))  (eq? 3 (length(M_state_try (get_element 1 (car lis)) declared_list value_list return break try throw catch finally))))
        (evaluate (cdr lis) declared_list                 
@@ -81,7 +81,7 @@
       ((and (eq? 'try (caar lis)) (eq? 3 (length(M_state_try (get_element 1 (car lis)) declared_list value_list return break try throw catch finally))))
        (evaluate (cdr lis) declared_list
                  (cadr (M_state_finally (cadr(get_element 3 (car lis))) declared_list
-                                        (M_state_remove_top_layer_value_list (cadr (M_state_catch (get_element 2 (car lis)) declared_list
+                                        (M_state_sync_value_list declared_list (cadr (M_state_catch (get_element 2 (car lis)) declared_list
                                                              (cadr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try throw catch finally))
                                                              (caddr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try throw catch finally))
                                                              return break try throw catch finally)))
@@ -494,7 +494,7 @@
 
 
 ;(interpret "Unit Tests/fileToParseTest2-9.txt")
-;(interpret "Unit Tests/fileToParseTest2-17.txt")
+(interpret "Unit Tests/fileToParseTest2-17.txt")
 
 (define tests
   (lambda x
@@ -515,7 +515,7 @@
         ((not (eq? (interpret "Unit Tests/fileToParseTest2-18.txt") 101)) (error "Test 2-18 failed"))
         (display "all tests passed")
         )))
-(tests)
+;(tests)
 
 
 
