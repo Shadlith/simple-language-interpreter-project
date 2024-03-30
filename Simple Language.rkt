@@ -3,8 +3,8 @@
 ; Group 8 - Suvaion Das, Remy Niman, Faraz Mamaghani
 ; Simple Language Interpreter
 
-
-(require "simpleParser.rkt")
+;(require "sectionParser.rkt")
+(require "functionParser.rkt")
 
 (define parse
   (lambda (filename)
@@ -21,8 +21,28 @@
                (evaluate parsed (list(list(box 'return))) (list(list(box 'null))) return '() '() )))
     ))
 
-;((var x) (= x 10) (var y (+ (* 3 x) 5)) (while (!= (% y x) 3)
-; (= y (+ y 1))) (if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1))))))
+'((function main () ((var x 10) (var y 20) (var z 30) (var min 0) (if (< x y) (= min x) (= min y)) (if (> min z) (= min z)) (return min))))
+
+'((var x 4) (var y (+ 6 x)) (function main () ((return (+ x y)))))
+
+'((function fib (a) ((if (== a 0) (return 0) (if (== a 1) (return 1) (return (+ (funcall fib (- a 1)) (funcall fib (- a 2))))))))
+  (function main () ((return (funcall fib 10)))))
+
+(define M_state_closure_maker
+  (lambda (lis func_name_list func_closure_list declared_list value_list)
+    (cond
+      ((null? lis) (list func_name_list func_closure_list declared_list value_list))
+      ((eq? 'function (caar lis))
+       (M_state_closure_maker (cdr lis) (cons (cadar lis) func_name_list)
+                              (cons (list(get_element 2 (car lis)) (get_element 3 (car lis)) (evaluate (lis declared_list value_list '() '() '()))) func_closure_list)))
+      ((eq? 'var (caar lis)) (M_state_closure_maker (cdr lis) func_name_list func_closure_list
+                                                    (car (M_state_declaration lis declared_list value_list '() '() '()))
+                                                    (cadr (M_state_declaration lis declared_list value_list '() '() '()))))
+      ((eq? '= (caar lis)) (M_state_closure_maker (cdr lis) func_name_list func_closure_list
+                                                    declared_list
+                                                    (cadr (M_state_assignment lis declared_list value_list '() '() '()))))
+      )))
+
 (define evaluate
   (lambda (lis declared_list value_list return break try)
     ;(newline) (display "declared list at top of evaluate") (display declared_list)
@@ -511,7 +531,9 @@
 
 
 ;These should error
-;(interpret "Unit Tests/fileToParseTest2-11.txt")
+(interpret "Unit Tests/fileToParseTest3-1.txt")
+(interpret "Unit Tests/fileToParseTest3-2.txt")
+(interpret "Unit Tests/fileToParseTest3-4.txt")
 ;(interpret "Unit Tests/fileToParseTest2-12.txt")
 ;(interpret "Unit Tests/fileToParseTest2-13.txt") ; This is supposed to error....and does, but b/c of Racket, not something we catch
 ;(interpret "Unit Tests/fileToParseTest2-19.txt")
