@@ -1,0 +1,7 @@
+var x = 4;
+var y = 6 + x;
+var z = 15;
+
+function main() {
+  return x + y;
+}
