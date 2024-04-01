@@ -3,8 +3,8 @@
 ; Group 8 - Suvaion Das, Remy Niman, Faraz Mamaghani
 ; Simple Language Interpreter
 
-
-(require "simpleParser.rkt")
+;(require "sectionParser.rkt")
+(require "functionParser.rkt")
 
 (define parse
   (lambda (filename)
@@ -17,25 +17,100 @@
   (lambda (filename)
     (define parsed (parse filename))
     (print parsed);just to see what it outputs
-    (call/cc (lambda (return)
-               (evaluate parsed (list(list(box 'return))) (list(list(box 'null))) return '() '() )))
+    (newline)
+    (display "closure: ") (print(M_state_closure_maker parsed (list(list(box 'return))) (list(list(box 'null))) '() '()))
+    ; Then, do M_state_call_function (which we haven't written yet) on "main".
+    ; M_state_call_fuction will probably work by calling "evaluate" on the function body with a modified  declared_list and value_list. These
+    ; declared_list and value_list will be derived from part 1 and 3 of the closure.
+
+    ; We'll need to put this call/cc somewhere....likley where we call evaluate (likely M_state_call_func b/c you need to be able to get out of any function via return
+    ;(call/cc (lambda (return)
+              ; (evaluate parsed (list(list(box 'return))) (list(list(box 'null))) return '() '() )))
     ))
 
-;((var x) (= x 10) (var y (+ (* 3 x) 5)) (while (!= (% y x) 3)
-; (= y (+ y 1))) (if (> x y) (return x) (if (> (* x x) y) (return (* x x)) (if (> (* x (+ x x)) y) (return (* x (+ x x))) (return (- y 1))))))
+
+(define M_state_closure_maker
+  (lambda (lis declared_list value_list func_name_list func_closure_list)
+    (cond
+      ((null? lis) (list declared_list value_list func_name_list func_closure_list))
+      
+      ((eq? 'function (caar lis))
+       (M_state_closure_maker (cdr lis)
+                              declared_list value_list
+                              (M_state_add_to_func_name_list (M_state_add_row_to_list func_name_list) (cadar lis))
+                              (M_state_add_to_func_closure_list (M_state_add_row_to_list func_closure_list)
+                                                                (list(get_element 2 (car lis)) (get_element 3 (car lis)) (length declared_list)))
+                              ))
+       
+     ((or (eq? 'var (caar lis)) (eq? '= (caar lis))) (evaluate lis declared_list value_list func_name_list func_closure_list '() '()' ()))
+
+     ; (M_state_closure_maker (cdr lis) func_name_list func_closure_list
+                                                ;   (car (evaluate lis declared_list value_list  func_name_list func_closure_list '() '() '()))
+                                                ;   (cadr (evaluate lis declared_list value_list  func_name_list func_closure_list '() '() '()))))
+      
+      ;((eq? '= (caar lis)) (M_state_closure_maker (cdr lis) func_name_list func_closure_list
+                                                  ; declared_list
+                                                   ;(cadr (M_state_assignment lis declared_list value_list func_name_list func_closure_list '() '() '()))))
+      )))
+
+((function min (x y z) ((if (< x y) (begin (if (< x z) (return x) (if (< z x) (return z)))) (if (> y z) (return z) (return y)))))
+ (var x 10) (var y 20) (var z 30) (var min1 (funcall min x y z)) (var min2 (funcall min z y x))
+ (function main () ((var min3 (funcall min y z x)) (if (== min1 min3) (if (== min1 min2) (if (== min2 min3) (return 1)))) (return 0))))
+
+(define M_value_call_function
+ (lambda (func_name lis declared_list value_list func_name_list func_closure_list)
+   (cond 
+     ((null? func_name_list) (list (declared_list value_list func_name_list func_closure_list)))
+     ((eq? func_name (car func_name_list)) ) ;when calling "create func layer, add a row to the delcared ist and value list
+    )))
+
+(define M_state_func_environment
+  (lambda (declared_list value_list num)
+    (cond
+      ((null? num) (list (declared_list value_list)))
+      ((eq? num (length declared_list)) (list (declared_list value_list)))
+      ((> num (length declared_list)) (M_state_func_environment (cdr declared_list) (cdr value_list) num))
+      ((< num (length declared_list)) (error "things are out of sync"))
+    )))
+
+(define M_state_create_func_layer
+  (lambda (formal_params actual_params declared_list value_list func_name_list func_closure_list)
+    (cond
+      ((null? formal_params) (list (declared_list value_list)))
+      (( ) (M_state_add_to_declared_list (declared_list (car formal_params)))
+           (M_state_add_to_value_list value_list
+                                      (call/cc (lambda (return) (evaluate (car actual_params) declared_list value_list func_name_list func_closure_list return '() '())))))
+        )))
+
+(define M_state_actual_param_evaluator
+  (lambda (param declared_list value_list func_name_list func_closure_list)
+    (cond
+      ((null? param) (error "gave 'actual param evaluator' null params"))
+      ((num? param) param)
+      ((member? param declared_list) (M_state_lookup (param declared_list value_list)))
+      ((boolean? param) (
+   
+
+
+
 (define evaluate
-  (lambda (lis declared_list value_list return break try)
+  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
     ;(newline) (display "declared list at top of evaluate") (display declared_list)
     ;(newline) (display "value list at top of evaluate") (display value_list)
     (cond
-      ((null? lis) (list declared_list value_list))
-      ((null? (car lis)) (list declared_list value_list))
-      ((eq? 'var (caar lis)) (M_state_declaration lis declared_list value_list return break try))
-      ((eq? '= (caar lis)) (M_state_assignment lis declared_list value_list return break try))
-      ((eq? 'if (caar lis)) (M_state_if lis declared_list value_list return break try))
+      ((null? lis) (list declared_list value_list func_name_list func_closure_list))
+      ((null? (car lis)) (list declared_list value_list func_name_list func_closure_list))
+      ((eq? 'function (caar lis)) (M_state_closure_maker lis declared_list value_list func_name_list func_closure_list))
+      ((eq? 'var (caar lis)) (M_state_declaration lis declared_list value_list func_name_list func_closure_list return break try))
+      ((eq? '= (caar lis)) (M_state_assignment lis declared_list value_list func_name_list func_closure_list return break try))
+      ((eq? 'if (caar lis)) (M_state_if lis declared_list value_list func_name_list func_closure_list return break try))
      
       ; when it's a "while" and the condition is true
-      ((eq? 'while (caar lis)) (evaluate (cdr lis) declared_list (M_state_sync_value_list declared_list (cadr (call/cc (lambda (break) (M_state_while lis declared_list value_list return break try))))) return break try))
+      ((eq? 'while (caar lis))
+       (evaluate (cdr lis)
+                 declared_list
+                 (M_state_sync_value_list declared_list (cadr (call/cc (lambda (break) (M_state_while lis declared_list value_list func_name_list func_closure_list return break try)))))
+                 func_name_list func_closure_list return break try))
       
       ; when it's return and a boolean, this gets it to be "true" or "false"
       ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return declared_list (M_state_modify_value_list declared_list value_list 'return (M_state_return_helper (cadar lis) declared_list value_list))))
@@ -49,10 +124,10 @@
 
       
       ((eq? 'begin (caar lis)) (evaluate (cdr lis) declared_list
-                                         (M_state_sync_value_list declared_list (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) return break try)))
-                                         return break try))
+                                         (M_state_sync_value_list declared_list (cadr (evaluate (cdar lis) (M_state_add_row_to_declared_list declared_list) (M_state_add_row_to_value_list value_list) func_name_list func_closure_list return break try)))
+                                          func_name_list func_closure_list return break try))
 
-      ((eq? 'continue (caar lis))(evaluate '() declared_list value_list return break try))
+      ((eq? 'continue (caar lis))(evaluate '() declared_list value_list func_name_list func_closure_list return break try))
 
       ((eq? 'break (caar lis))(break (list declared_list (M_state_sync_value_list declared_list value_list))))
 
@@ -63,13 +138,13 @@
                                                              (M_state_sync_value_list declared_list (cadr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try)))
                                                              (caddr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try))
                                                              return break try)))                                     
-                                        return break try))
+                                        func_name_list func_closure_list return break try))
       
       ; hit "try", "finally" doesn't exist, throw is not triggered.
       ((and (eq? 'try (caar lis)) (null? (get_element 3 (car lis))))
        (evaluate (cdr lis) declared_list                                       
                          (M_state_sync_value_list declared_list (cadr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try)))       
-                                        return break try))
+                                        func_name_list func_closure_list return break try))
 
        ; hit "try", "finally" does exist, throw is triggered.
       ((and (eq? 'try (caar lis)) (eq? 3 (length(M_state_try (get_element 1 (car lis)) declared_list value_list return break try))))
@@ -79,7 +154,7 @@
                                                              (M_state_sync_value_list declared_list (cadr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try)))
                                                              (caddr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try))
                                                              return break try)))
-                                        return break try))
+                                         func_name_list func_closure_list return break try))
                  return break try))
 
       ; hit "try", "finally" does exist, throw is not triggered.
@@ -88,7 +163,7 @@
                  (cadr (M_state_finally (cadr (get_element 3 (car lis))) declared_list                         
                                                  (M_state_sync_value_list declared_list (cadr (M_state_try (get_element 1 (car lis)) declared_list value_list return break try)))                                                             
                                                              return break try))
-                                        return break try))
+                                        func_name_list func_closure_list return break try))
 
       ((eq? 'throw (caar lis)) (try (list declared_list value_list (cadar lis))))
       
@@ -106,82 +181,86 @@
 |#
 
 (define M_state_declaration
-  (lambda (lis declared_list value_list return break try)
+  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
     (cond
        ;if the first word is "var" and this sublist just has the declaration in it (ex: var x)
       ((eq? '() (cddar lis))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error") return break try))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list "error") func_name_list func_closure_list return break try))
       ;if the first word is "var" and the right is a number (ex: var x = 10)
       ((number? (get_element 2 (car lis)))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (get_element 2 (car lis))) return break try))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (get_element 2 (car lis))) func_name_list func_closure_list return break try))
       ; if the first word is var and the 3rd element is a variable. (ex: var x = y (and y is declared)) 
       ((member? (get_element 2 (car lis)) declared_list)
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_state_lookup(get_element 2 (car lis)) declared_list value_list)) return break try))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_state_lookup(get_element 2 (car lis)) declared_list value_list)) func_name_list func_closure_list return break try))
       ; if the first word is var and the 3rd element is a variable and its not in the member list (didn't finish this line...)
       ;((and (eq? 'var (caar lis)) (member? (get_element 2 (car lis)) declared_list))
       ;if the first word is "var" and this sublist is a boolean. ex: var x = a && b
       ((boolean_operator? (car (caddar lis)))
-       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) return break try))
+       (evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) func_name_list func_closure_list return break try))
       ;if the first word is "var" and there is more in this sublist than just the declaration aka our first word is var and it's not of the others ex: var x = 5+7
-      (else(evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_value (caddar lis) declared_list value_list)) return break try))
+      (else(evaluate (cdr lis) (M_state_add_to_declared_list declared_list (cadar lis)) (M_state_add_to_value_list value_list (M_value (caddar lis) declared_list value_list)) func_name_list func_closure_list return break try))
       )))
 
 (define M_state_assignment
-  (lambda (lis declared_list value_list return break try)
+  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
     (cond
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and a boolean ex: x = a && b
       ((and (and (member? (cadar lis) declared_list) (list? (caddar lis))) (boolean_operator? (car (caddar lis))))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) return break try))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) func_name_list func_closure_list return break try))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and not a boolean ex: x = 5+7
       ((and (member? (cadar lis) declared_list) (list? (caddar lis)))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_value (caddar lis) declared_list value_list)) return break try))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_value (caddar lis) declared_list value_list)) func_name_list func_closure_list return break try))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number ex: x = 5
       ((and (member? (cadar lis) declared_list) (number? (caddar lis)))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (caddar lis)) return break try))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (caddar lis)) func_name_list func_closure_list return break try))
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a variable ex: x = y
       ((and (member? (cadar lis) declared_list) (member? (caddar lis) declared_list))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list)) return break try))
+       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list)) func_name_list func_closure_list return break try))
       ; if it's an assignment statement and gets to this line, it's not in the declared list and should fail. 
       (else (error "our version of variable not initialized"))
       )))
 
 (define M_state_if
-  (lambda (lis declared_list value_list return break try)
+  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
     (cond
        ; if the list starts with "if" and the condition next to it is true...then evalute it (we think this one is right) 
       ((M_boolean (cadar lis) declared_list value_list)
-       (evaluate (cdr lis) (car (evaluate (list (get_element 2 (car lis))) declared_list value_list return break try)) (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list return break try)) return break try))
+       (evaluate (cdr lis)
+                 (car (evaluate (list (get_element 2 (car lis))) declared_list value_list func_name_list func_closure_list return break try))
+                 (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list func_name_list func_closure_list return break try)) func_name_list func_closure_list return break try))
       ; if the condition is not true, the list has 4 elements and it starts with an "if"
       ((eq? (length (car lis)) 4)
-       (evaluate (cdr lis) (car (evaluate (list (get_element 3 (car lis))) declared_list value_list return break try)) (cadr (evaluate (list (get_element 3 (car lis))) declared_list value_list return break try)) return break try))
+       (evaluate (cdr lis)
+                 (car (evaluate (list (get_element 3 (car lis))) declared_list value_list func_name_list func_closure_list return break try))
+                 (cadr (evaluate (list (get_element 3 (car lis))) declared_list value_list func_name_list func_closure_list return break try)) return break try))
       ; if the list starts with "if", but the condition is not true
-      (else (evaluate (cdr lis) declared_list value_list return break try))
+      (else (evaluate (cdr lis) declared_list value_list func_name_list func_closure_list return break try))
     )))
 
 (define M_state_while
-  (lambda (lis declared_list value_list return break try)
+  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
     (cond
-      ((M_boolean (cadar lis) declared_list value_list) (M_state_while lis (car (evaluate (cddar lis) declared_list value_list return break try)) (cadr (evaluate (cddar lis) declared_list value_list return break try)) return  break try))
+      ((M_boolean (cadar lis) declared_list value_list) (M_state_while lis (car (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) (cadr (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) return  break try))
       (else (list declared_list value_list))
     )))
 
     
 (define M_state_try
-  (lambda (lis declared_list value_list return break try)
-      (call/cc (lambda (try) (evaluate lis declared_list value_list return break try)))
+  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
+      (call/cc (lambda (try) (evaluate lis declared_list value_list func_name_list func_closure_list return break try)))
     ))
 
 (define M_state_catch
-  (lambda (lis declared_list value_list thrown_value return break try)
+  (lambda (lis declared_list value_list thrown_value func_name_list func_closure_list return break try)
       (evaluate (get_element 2 lis)
                 (M_state_add_to_declared_list (M_state_add_row_to_declared_list declared_list) (car (get_element 1 lis)))
                 (M_state_add_to_value_list (M_state_add_row_to_value_list value_list) thrown_value)
-                return break try)
+                func_name_list func_closure_list return break try)
     ))
 
 (define M_state_finally
-  (lambda (lis decared_list value_list return break try)
-    (evaluate lis decared_list value_list return break try)
+  (lambda (lis decared_list value_list func_name_list func_closure_list return break try)
+    (evaluate lis decared_list value_list func_name_list func_closure_list return break try)
      ))
            
 (define M_state_sync_value_list
@@ -203,9 +282,24 @@
     (cons '() (car value_list))
     ))
 
+(define M_state_add_row_to_list
+  (lambda lis
+    (cons '() (car lis))
+    ))
+
 (define M_state_add_to_declared_list
   (lambda (declared_list var)
     (cons (cons (box var) (car declared_list)) (cdr declared_list))
+    ))
+
+(define M_state_add_to_func_name_list
+  (lambda (func_name_list var)
+    (cons (cons (box var) (car func_name_list)) (cdr func_name_list))
+    ))
+
+(define M_state_add_to_func_closure_list
+  (lambda (func_closure_list var)
+    (cons (cons var (car func_closure_list)) (cdr func_closure_list))
     ))
 
 (define M_state_remove_top_layer_declared_list
@@ -511,7 +605,10 @@
 
 
 ;These should error
-;(interpret "Unit Tests/fileToParseTest2-11.txt")
+;(interpret "Unit Tests/fileToParseTest3-1.txt")
+;(interpret "Unit Tests/fileToParseTest3-2test.txt")
+;(interpret "Unit Tests/fileToParseTest3-4.txt")
+(interpret "Unit Tests/fileToParseTest3-5.txt")
 ;(interpret "Unit Tests/fileToParseTest2-12.txt")
 ;(interpret "Unit Tests/fileToParseTest2-13.txt") ; This is supposed to error....and does, but b/c of Racket, not something we catch
 ;(interpret "Unit Tests/fileToParseTest2-19.txt")

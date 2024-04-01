@@ -11,6 +11,8 @@
     (parser filename)
     ))
 
+;(((#&return)) ((#&null)) ((#&main) (#&fib)) (((() ((return (funcall fib 10))) 1)) (((a) ((if (== a 0) (return 0) (if (== a 1) (return 1) (return (+ (funcall fib (- a 1)) (funcall fib (- a 2))))))) 1))))
+'(((#&r #&y #&x #&return)) ((#&0 #&10 #&1 #&null)) ((#&main)) (((() ((while (< x y) (begin (= r (+ r x)) (= x (+ x 1)))) (return r)) 1))))
 
 ;code to run on: (interpret "fileToParse.txt")
 (define interpret
@@ -19,6 +21,11 @@
     (print parsed);just to see what it outputs
     (newline)
     (display "closure: ") (print(M_state_closure_maker parsed (list(list(box 'return))) (list(list(box 'null))) '() '()))
+    (M_value_call_function 'main '()
+                           (get_element 0 (M_state_closure_maker parsed (list(list(box 'return))) (list(list(box 'null))) '() '()))
+                           (get_element 1 (M_state_closure_maker parsed (list(list(box 'return))) (list(list(box 'null))) '() '()))
+                           (get_element 2 (M_state_closure_maker parsed (list(list(box 'return))) (list(list(box 'null))) '() '()))
+                           (get_element 3 (M_state_closure_maker parsed (list(list(box 'return))) (list(list(box 'null))) '() '())))
     ; Then, do M_state_call_function (which we haven't written yet) on "main".
     ; M_state_call_fuction will probably work by calling "evaluate" on the function body with a modified  declared_list and value_list. These
     ; declared_list and value_list will be derived from part 1 and 3 of the closure.
@@ -55,9 +62,64 @@
 
 
 
+(define M_value_call_function
+ (lambda (func_name actual_params declared_list value_list func_name_list func_closure_list)
+   (cond 
+     ((null? func_name_list) (list declared_list value_list func_name_list func_closure_list))
+     ((list? (car func_name_list)) (M_value_call_function func_name actual_params declared_list value_list (car func_name_list) (car func_closure_list)))
+     ((eq? func_name (unbox (car func_name_list)))
+      (call/cc (lambda (return) (evaluate
+       (get_element 1 (car func_closure_list))
+       (car (M_state_func_environment_shell (get_element 2 (car func_closure_list)) (get_element 0 (car func_closure_list)) actual_params declared_list value_list func_name_list func_closure_list))
+       (cadr (M_state_func_environment_shell (get_element 2 (car func_closure_list)) (get_element 0 (car func_closure_list)) actual_params declared_list value_list func_name_list func_closure_list))
+       func_name_list func_closure_list return '() '()))))
+     (else (M_value_call_function func_name actual_params declared_list value_list (cdr func_name_list) (cdr func_closure_list)))
+    )))
 
-;(define M_value_call_function
- ; (
+(define M_state_func_environment_shell
+  (lambda (num formal_params actual_params declared_list value_list func_name_list func_closure_list)
+    (M_state_create_func_layer formal_params actual_params
+                                (M_state_add_row_to_declared_list (car (M_state_func_environment declared_list value_list num)))
+                                (M_state_add_row_to_value_list (cadr (M_state_func_environment declared_list value_list num)))
+                                func_name_list func_closure_list)
+     ))
+                                
+   
+(define M_state_func_environment
+  (lambda (declared_list value_list num)
+    (cond
+      ((null? num) (list declared_list value_list))
+      ((eq? num (length declared_list)) (list declared_list value_list))
+      ((> num (length declared_list)) (M_state_func_environment (cdr declared_list) (cdr value_list) num))
+      ((< num (length declared_list)) (error "things are out of sync"))
+    )))
+
+(define M_state_create_func_layer
+  (lambda (formal_params actual_params declared_list value_list func_name_list func_closure_list)
+    (cond
+      ((null? formal_params) (list declared_list value_list))
+      (else (M_state_create_func_layer
+             (cdr formal_params)
+             (cdr actual_params)
+             (M_state_add_to_declared_list declared_list (car formal_params))
+             (M_state_add_to_value_list value_list (M_state_actual_param_evaluator (car actual_params) declared_list value_list func_name_list func_closure_list))
+             func_name_list func_closure_list))           
+        )))
+
+(define M_state_actual_param_evaluator
+  (lambda (param declared_list value_list func_name_list func_closure_list)
+    (cond
+      ((null? param) (error "gave 'actual param evaluator' null params"))
+      ((number? param) param)
+      ((member? param declared_list) (M_state_lookup (param declared_list value_list)))
+      ((boolean? param) (param)) ;this might need a true/false converter
+      ;FIGURE THIS OUT FOR TEST 9 ((eq? 'funcall (car param)) (M_value_call_function (cadr param) param declared_list value_list func_name_list func_closure_list))
+      ((and (list? param) (operator? (car param))) (M_value param declared_list value_list))
+      ((and (list? param) (boolean_operator? (car param))) (M_boolean param declared_list value_list))
+      )))
+   
+
+
 
 (define evaluate
   (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
@@ -67,6 +129,7 @@
       ((null? lis) (list declared_list value_list func_name_list func_closure_list))
       ((null? (car lis)) (list declared_list value_list func_name_list func_closure_list))
       ((eq? 'function (caar lis)) (M_state_closure_maker lis declared_list value_list func_name_list func_closure_list))
+      ((eq? 'funcall (caar lis)) (M_value_call_function (cadar lis) (caddar lis) declared_list value_list func_name_list func_closure_list))
       ((eq? 'var (caar lis)) (M_state_declaration lis declared_list value_list func_name_list func_closure_list return break try))
       ((eq? '= (caar lis)) (M_state_assignment lis declared_list value_list func_name_list func_closure_list return break try))
       ((eq? 'if (caar lis)) (M_state_if lis declared_list value_list func_name_list func_closure_list return break try))
@@ -206,7 +269,7 @@
 (define M_state_while
   (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
     (cond
-      ((M_boolean (cadar lis) declared_list value_list) (M_state_while lis (car (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) (cadr (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) return  break try))
+      ((M_boolean (cadar lis) declared_list value_list) (M_state_while lis (car (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) (cadr (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) func_name_list func_closure_list return  break try))
       (else (list declared_list value_list))
     )))
 
@@ -484,7 +547,7 @@
       ((eq? var #f) #f)
       )))
 
-
+s
 ; variable_type tells us if the variable is declared or not. If it's 'true' or 'false' it converts it to a hashtag
 (define variable_type?
   (lambda var
@@ -493,7 +556,7 @@
       ((number? (car var)) (car var))
       ((boolean? (car var)) (car var))
       ((or (eq? 'true (car var)) (eq? 'false (car var))) (M_boolean_tf_to_hashtags (car var)))
-      (else (error "our version of variable not initialized"))
+      (else (display var) (error "our version of variable not initialized"))
       )))
 
 (define member?
@@ -572,8 +635,9 @@
 
 ;These should error
 ;(interpret "Unit Tests/fileToParseTest3-1.txt")
-(interpret "Unit Tests/fileToParseTest3-2test.txt")
-;(interpret "Unit Tests/fileToParseTest3-4.txt")
+;(interpret "Unit Tests/fileToParseTest3-2.txt")
+;(interpret "Unit Tests/fileToParseTest3-3.txt")
+(interpret "Unit Tests/fileToParseTest3-4.txt")
 ;(interpret "Unit Tests/fileToParseTest2-12.txt")
 ;(interpret "Unit Tests/fileToParseTest2-13.txt") ; This is supposed to error....and does, but b/c of Racket, not something we catch
 ;(interpret "Unit Tests/fileToParseTest2-19.txt")
