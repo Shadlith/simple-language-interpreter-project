@@ -51,7 +51,10 @@
  (lambda (func_name actual_params state)
    (cond 
      ((null? (get_element 2 state)) state)
-     ((list? (car (get_element 2 state))) (M_value_call_function func_name actual_params (get_element 0 state)  (get_element 1 state)  (car (get_element 2 state)) (car (get_element 3 state))))
+     ((list? (car (get_element 2 state))) (M_value_call_function func_name actual_params (list (get_element 0 state)
+                                                                                               (get_element 1 state)
+                                                                                               (car (get_element 2 state))
+                                                                                               (car (get_element 3 state)))))
      ((eq? func_name (unbox (car (get_element 2 state) )))
       (call/cc (lambda (return) (evaluate
        (get_element 1 (car (get_element 3 state)))
@@ -75,7 +78,7 @@
     (cond
       ((null? num) state)
       ((eq? num (length (get_element 0 state))) state)
-      ((< num (length (get_element 0 state))) (M_state_func_environment (list (cdr declared_list) (cdr value_list) (get_element 2 state) (get_element 3 state)) num))
+      ((< num (length (get_element 0 state))) (M_state_func_environment (list (cdr(get_element 0 state)) (cdr (get_element 1 state)) (get_element 2 state) (get_element 3 state)) num))
       ((> num (length (get_element 0 state))) (error "things are out of sync"))
     )))
 
@@ -256,7 +259,7 @@
                        (get_element 3 state))
                  return break try))
       ; if the first word is var and the 3rd element is a variable. (ex: var x = y (and y is declared)) 
-      ((member? (get_element 2 (car lis)) declared_list)
+      ((member? (get_element 2 (car lis)) (get_element 0 state))
        (evaluate (cdr lis)
                  (list (M_state_add_to_declared_list (get_element 0 state) (cadar lis))
                        (M_state_add_to_value_list (get_element 1 state) (M_state_lookup(get_element 2 (car lis)) state))
@@ -284,72 +287,109 @@
 ; 4-4-24: This is where we stopped teh state conversion 
 
 (define M_state_assignment
-  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
+  (lambda (lis state return break try)
     (cond
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and a boolean ex: x = a && b
-      ((and (and (member? (cadar lis) declared_list) (list? (caddar lis))) (boolean_operator? (car (caddar lis))))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) declared_list value_list))) func_name_list func_closure_list return break try))
+      ((and (and (member? (cadar lis) (get_element 0 state)) (list? (caddar lis))) (boolean_operator? (car (caddar lis))))
+       (evaluate (cdr lis) (list (get_element 0 state)
+                                 (M_state_modify_value_list state (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state)))
+                                 (get_element 2 state)
+                                 (get_element 3 state))
+                                 return break try))
+      
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and not a boolean ex: x = 5+7
-      ((and (member? (cadar lis) declared_list) (list? (caddar lis)))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_value (caddar lis) declared_list value_list func_name_list func_closure_list)) func_name_list func_closure_list return break try))
+      ((and (member? (cadar lis) (get_element 0 state)) (list? (caddar lis)))
+       (evaluate (cdr lis) (list (get_element 0 state)
+                 (M_state_modify_value_list state (cadar lis) (M_value (caddar lis) state))
+                 (get_element 2 state)
+                 (get_element 3 state))
+                 return break try))
+      
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number ex: x = 5
-      ((and (member? (cadar lis) declared_list) (number? (caddar lis)))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (caddar lis)) func_name_list func_closure_list return break try))
+      ((and (member? (cadar lis) (get_element 0 state)) (number? (caddar lis)))
+       (evaluate (cdr lis) (list (get_element 0 state)
+                                 (M_state_modify_value_list state (cadar lis) (caddar lis))
+                                 (get_element 2 state)
+                                 (get_element 3 state))
+                                 return break try))
+      
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a variable ex: x = y
-      ((and (member? (cadar lis) declared_list) (member? (caddar lis) declared_list))
-       (evaluate (cdr lis) declared_list (M_state_modify_value_list declared_list value_list (cadar lis) (M_state_lookup (caddar lis) declared_list value_list)) func_name_list func_closure_list return break try))
+      ((and (member? (cadar lis) (get_element 0 state)) (member? (caddar lis) (get_element 0 state)))
+       (evaluate (cdr lis) (list (get_element 0 state)
+                                 (M_state_modify_value_list state (cadar lis) (M_state_lookup (caddar lis) state))
+                                 (get_element 2 state)
+                                 (get_element 3 state))
+                                 return break try))
       ; if it's an assignment statement and gets to this line, it's not in the declared list and should fail. 
       (else (error "our version of variable not initialized"))
       )))
 
 (define M_state_if
-  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
+  (lambda (lis state return break try)
     (cond
        ; if the list starts with "if" and the condition next to it is true...then evalute it (we think this one is right) 
-      ((M_boolean (cadar lis) declared_list value_list)
+      ((M_boolean (cadar lis) state)
        (evaluate (cdr lis)
-                 (car (evaluate (list (get_element 2 (car lis))) declared_list value_list func_name_list func_closure_list return break try))
-                 (cadr (evaluate (list (get_element 2 (car lis))) declared_list value_list func_name_list func_closure_list return break try)) func_name_list func_closure_list return break try))
+                 (list (car (evaluate (list (get_element 2 (car lis))) state return break try))
+                 (cadr (evaluate (list (get_element 2 (car lis))) state return break try))
+                 (get_element 2 state)
+                 (get_element 3 state))
+                 return break try))
+      
       ; if the condition is not true, the list has 4 elements and it starts with an "if"
       ((eq? (length (car lis)) 4)
        (evaluate (cdr lis)
-                 (car (evaluate (list (get_element 3 (car lis))) declared_list value_list func_name_list func_closure_list return break try))
-                 (cadr (evaluate (list (get_element 3 (car lis))) declared_list value_list func_name_list func_closure_list return break try)) return break try))
-      ; if the list starts with "if", but the condition is not true
-      (else (evaluate (cdr lis) declared_list value_list func_name_list func_closure_list return break try))
+                 (list (car (evaluate (list (get_element 3 (car lis))) state return break try))
+                 (cadr (evaluate (list (get_element 3 (car lis))) state return break try))
+                 (get_element 2 state)
+                 (get_element 3 state))
+                 return break try))
+      
+       ; if the list starts with "if", but the condition is not true
+      (else (evaluate (cdr lis) state return break try))
     )))
 
 (define M_state_while
-  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
+  (lambda (lis state return break try)
     (cond
-      ((M_boolean (cadar lis) declared_list value_list) (M_state_while lis (car (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) (cadr (evaluate (cddar lis) declared_list value_list func_name_list func_closure_list return break try)) func_name_list func_closure_list return  break try))
-      (else (list declared_list value_list))
+      ((M_boolean (cadar lis) state)
+       (M_state_while lis (list (car (evaluate (cddar lis) state return break try))
+                                (cadr (evaluate (cddar lis) state return break try))
+                                (get_element 2 state)
+                                (get_element 3 state))
+                                return break try))
+      (else state)
     )))
 
     
 (define M_state_try
-  (lambda (lis declared_list value_list func_name_list func_closure_list return break try)
-      (call/cc (lambda (try) (evaluate lis declared_list value_list func_name_list func_closure_list return break try)))
+  (lambda (lis state return break try)
+      (call/cc (lambda (try) (evaluate lis state return break try)))
     ))
 
 (define M_state_catch
-  (lambda (lis declared_list value_list thrown_value func_name_list func_closure_list return break try)
+  (lambda (lis state thrown_value return break try)
       (evaluate (get_element 2 lis)
-                (M_state_add_to_declared_list (M_state_add_row_to_declared_list declared_list) (car (get_element 1 lis)))
-                (M_state_add_to_value_list (M_state_add_row_to_value_list value_list) thrown_value)
-                func_name_list func_closure_list return break try)
+                (list (M_state_add_to_declared_list (M_state_add_row_to_declared_list (get_element 0 state)) (car (get_element 1 lis)))
+                (M_state_add_to_value_list (M_state_add_row_to_value_list (get_element 1 state)) thrown_value)
+                (get_element 2 state)
+                (get_element 3 state))
+                return break try)
     ))
 
 (define M_state_finally
-  (lambda (lis decared_list value_list func_name_list func_closure_list return break try)
-    (evaluate lis decared_list value_list func_name_list func_closure_list return break try)
+  (lambda (lis state return break try)
+    (evaluate lis state return break try)
      ))
            
 (define M_state_sync_value_list
-  (lambda (declared_list value_list)
+  (lambda (state)
     (cond
-      ((eq? (length declared_list) (length value_list)) value_list)
-      (else (M_state_sync_value_list declared_list (M_state_remove_top_layer_value_list value_list)))
+      ((eq? (length (get_element 0 state)) (length (get_element 1 state))) (get_element 1 state))
+      (else (M_state_sync_value_list (list (get_element 0 state)
+                                           (M_state_remove_top_layer_value_list (get_element 1 state))
+                                           (get_element 2 state)
+                                           (get_element 3 state))))
       )))
                         
 
@@ -404,36 +444,63 @@
 
 ;if the variable is already in the declared-list, then this changes the value in the value list.
 (define M_state_modify_value_list
-  (lambda (declared_list value_list var newval)
+  (lambda (state var newval)
     (cond
-      ((null? declared_list) (error "our version of variable not initialized"))
-      ((and (list? (car declared_list)) (member? var (car declared_list))) (cons (M_state_modify_value_list (car declared_list) (car value_list) var newval) (cdr value_list)))
-      ((list? (car declared_list)) (cons (car value_list) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval)))
+      ((null? (get_element 0 state)) (error "our version of variable not initialized"))
+      ((and (list? (car (get_element 0 state))) (member? var (car (get_element 0 state))))
+       (cons (M_state_modify_value_list (list (car (get_element 0 state))
+                                              (car (get_element 1 state))
+                                              (get_element 2 state)
+                                              (get_element 3 state))
+                                        var newval) (cdr (get_element 1 state))))
+      
+      ((list? (car (get_element 0 state)))
+       (cons (car (get_element 1 state)) (M_state_modify_value_list (list (cdr (get_element 0 state))
+                                                                          (cdr (get_element 1 state))
+                                                                          (get_element 2 state)
+                                                                          (get_element 3 state))
+                                                                          var newval)))
+      
       ; 3-12: This eq line is where we have an issue.....both don't work
-      ((eq? var (unbox (car declared_list))) (cons (box newval) (cdr value_list)))
+      ((eq? var (unbox (car (get_element 0 state)))) (cons (box newval) (cdr (get_element 1 state))))
       ; the set-box! works.....except for the last test of Part 1.....so, we're not going to do it (for now)
       ;((eq? var (unbox (car declared_list))) (begin (set-box! (car value_list) newval) value_list))
-      (else (cons (car value_list) (M_state_modify_value_list (cdr declared_list) (cdr value_list) var newval)))
+      (else (cons (car (get_element 1 state)) (M_state_modify_value_list (list (cdr (get_element 0 state))
+                                                                               (cdr (get_element 1 state))
+                                                                               (get_element 2 state)
+                                                                               (get_element 3 state))
+                                                                         var newval)))
     )))
 
 (define M_state_lookup
-  (lambda (var declared_list value_list)
+  (lambda (var state)
     (cond
-      ((null? declared_list) (error "variable not found"))
-      ;((null? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
-      ((and (and (list? (car declared_list)) (member? var (car declared_list))) (not(null? (car declared_list)))) (M_state_lookup var (car declared_list) (car value_list)))
-      ((list? (car declared_list)) (M_state_lookup var (cdr declared_list) (cdr value_list)))
-      ((eq? var (unbox (car declared_list))) (variable_type?(unbox (car value_list))))
-      (else (M_state_lookup var (cdr declared_list) (cdr value_list)))
+      ((null? (get_element 0 state)) (error "variable not found"))
+      ((and (and (list? (car (get_element 0 state))) (member? var (car (get_element 0 state)))) (not(null? (car (get_element 0 state)))))
+       (M_state_lookup var (list (car (get_element 0 state))
+                                 (car (get_element 1 state))
+                                 (get_element 2 state)
+                                 (get_element 3 state))))
+      
+      ((list? (car (get_element 0 state))) (M_state_lookup var (list (cdr (get_element 0 state))
+                                                                     (cdr (get_element 1 state))
+                                                                     (get_element 2 state)
+                                                                     (get_element 3 state))))
+      
+      ((eq? var (unbox (car (get_element 0 state)))) (variable_type?(unbox (car (get_element 1 state)))))
+      (else (M_state_lookup var (list (cdr (get_element 0 state))
+                                      (cdr (get_element 1 state))
+                                      (get_element 2 state)
+                                      (get_element 3 state))))
       )))
 
 (define M_value
-  (lambda (expression declared_list value_list func_name_list func_closure_list)
+  (lambda (expression state)
     (cond
       ((null? expression) '())
       ((number? expression) expression)
       ((and (and (eq? (length expression) 2) (eq? (car expression) '-))) 
-       (M_value_mult -1 (M_value (get_element 1 expression) declared_list value_list func_name_list func_closure_list)))
+       (M_value_mult -1 (M_value (get_element 1 expression) state)))
        
       ((and (and (eq? (car expression) '+) (number? (get_element 1 expression))) (number? (get_element 2 expression)))
        (M_value_add (get_element 1 expression) (get_element 2 expression)))
@@ -455,29 +522,29 @@
 
       ((and (list? (get_element 1 expression)) (eq? 'funcall (car (get_element 1 expression))))
        (M_value (list (get_element 0 expression)
-                      (M_value_call_function (get_element 1 (get_element 1 expression)) (get_element 2 (get_element 1 expression)) declared_list value_list func_name_list func_closure_list)
+                      (M_value_call_function (get_element 1 (get_element 1 expression)) (get_element 2 (get_element 1 expression)) state)
                       (get_element 2 expression))))
 
       ((and (list? (get_element 2 expression)) (eq? 'funcall (car (get_element 2 expression))))
        (M_value (list (get_element 0 expression)
                       (get_element 1 expression)
-                      (M_value_call_function (get_element 1 (get_element 2 expression)) (get_element 2 (get_element 2 expression)) declared_list value_list func_name_list func_closure_list))))
+                      (M_value_call_function (get_element 1 (get_element 2 expression)) (get_element 2 (get_element 2 expression)) state))))
       
       ((list? (get_element 1 expression))
        (M_value (list (get_element 0 expression)
-                             (M_value (get_element 1 expression) declared_list value_list func_name_list func_closure_list) (get_element 2 expression)) declared_list value_list func_name_list func_closure_list))
+                             (M_value (get_element 1 expression) state) (get_element 2 expression)) state))
 
       ((list? (get_element 2 expression))
        (M_value (list (get_element 0 expression)
-                              (get_element 1 expression)  (M_value (get_element 2 expression) declared_list value_list func_name_list func_closure_list)) declared_list value_list func_name_list func_closure_list))
+                              (get_element 1 expression)  (M_value (get_element 2 expression) state)) state))
 
-      ((member? (get_element 1 expression) declared_list)
+      ((member? (get_element 1 expression) (get_element 0 state))
        (M_value (list (get_element 0 expression)
-                             (M_state_lookup (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list func_name_list func_closure_list))
+                             (M_state_lookup (get_element 1 expression) state) (get_element 2 expression)) state))
 
-      ((member? (get_element 2 expression) declared_list)
+      ((member? (get_element 2 expression) (get_element 0 state))
        (M_value (list (get_element 0 expression)
-                              (get_element 1 expression)  (M_state_lookup (get_element 2 expression) declared_list value_list)) declared_list value_list func_name_list func_closure_list))
+                              (get_element 1 expression)  (M_state_lookup (get_element 2 expression) state)) state))
       )))
 
 
@@ -518,34 +585,44 @@
 
 
 (define M_boolean
-  (lambda (expression declared_list value_list func_name_list func_closure_list)
+  (lambda (expression state)
     (cond
       ((null? expression) false)
       ((eq? expression 'true) #t)
       ((eq? expression 'false) #f)
-      ((and (and (list? (get_element 1 expression)) (eq? (car expression) '!)) (boolean_operator? (car (get_element 1 expression)))) (M_boolean (list (get_element 0 expression) (M_boolean (get_element 1 expression) declared_list value_list)) declared_list value_list))
-      ((eq? (car expression) '!) (M_boolean_tf_to_hashtags (not (M_boolean_truth_finder (get_element 1 expression) declared_list value_list))))
+      ((and (and (list? (get_element 1 expression)) (eq? (car expression) '!)) (boolean_operator? (car (get_element 1 expression))))
+       (M_boolean (list (get_element 0 expression) (M_boolean (get_element 1 expression) state)) state))
+      ((eq? (car expression) '!) (M_boolean_tf_to_hashtags (not (M_boolean_truth_finder (get_element 1 expression) state))))
       
       ((boolean? expression) expression)
      
       ;Checks if left side is a boolean equation or a integer and calcs it
-      ((eq? (get_element 1 expression) 'true) (M_boolean (list (get_element 0 expression) #t (get_element 2 expression)) declared_list value_list))
-      ((eq? (get_element 1 expression) 'false) (M_boolean (list (get_element 0 expression) #f (get_element 2 expression)) declared_list value_list))
-      ((and (list? (get_element 1 expression)) (boolean_operator? (car (get_element 1 expression)))) (M_boolean (list (get_element 0 expression) (M_boolean (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list))
-      ((list? (get_element 1 expression)) (M_boolean (list (get_element 0 expression) (M_value (get_element 1 expression) declared_list value_list func_name_list func_closure_list) (get_element 2 expression)) declared_list value_list))
+      ((eq? (get_element 1 expression) 'true) (M_boolean (list (get_element 0 expression) #t (get_element 2 expression)) state))
+      ((eq? (get_element 1 expression) 'false) (M_boolean (list (get_element 0 expression) #f (get_element 2 expression)) state))
+      ((and (list? (get_element 1 expression)) (boolean_operator? (car (get_element 1 expression))))
+       (M_boolean (list (get_element 0 expression) (M_boolean (get_element 1 expression) state) (get_element 2 expression)) state))
+      ((list? (get_element 1 expression))
+       (M_boolean (list (get_element 0 expression) (M_value (get_element 1 expression) state) (get_element 2 expression)) state))
+
       ; as above but for right side
-      ((eq? (get_element 2 expression) 'true) (M_boolean (list (get_element 0 expression) (get_element 1 expression) #t) declared_list value_list))
-      ((eq? (get_element 2 expression) 'false) (M_boolean (list (get_element 0 expression) (get_element 1 expression) #f) declared_list value_list))
-      ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression)))) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_boolean (get_element 2 expression) declared_list value_list)) declared_list value_list))
-      ((list? (get_element 2 expression)) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_value (get_element 2 expression) declared_list value_list func_name_list func_closure_list)) declared_list value_list))
+      ((eq? (get_element 2 expression) 'true) (M_boolean (list (get_element 0 expression) (get_element 1 expression) #t) state))
+      ((eq? (get_element 2 expression) 'false) (M_boolean (list (get_element 0 expression) (get_element 1 expression) #f) state))
+      ((and (list? (get_element 2 expression)) (boolean_operator? (car (get_element 2 expression))))
+       (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_boolean (get_element 2 expression) state)) state))
+      ((list? (get_element 2 expression))
+       (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_value (get_element 2 expression) state)) state))
 
       
-      ((eq? (car expression) '&&) (M_boolean_tf_to_hashtags (and (M_boolean_truth_finder (get_element 1 expression) declared_list value_list) (M_boolean_truth_finder (get_element 2 expression) declared_list value_list))))
-      ((eq? (car expression) '||) (M_boolean_tf_to_hashtags (or (M_boolean_truth_finder (get_element 1 expression) declared_list value_list) (M_boolean_truth_finder (get_element 2 expression) declared_list value_list))))
+      ((eq? (car expression) '&&)
+       (M_boolean_tf_to_hashtags (and (M_boolean_truth_finder (get_element 1 expression) state) (M_boolean_truth_finder (get_element 2 expression) state))))
+      ((eq? (car expression) '||)
+       (M_boolean_tf_to_hashtags (or (M_boolean_truth_finder (get_element 1 expression) state) (M_boolean_truth_finder (get_element 2 expression) state))))
       
       ; if the left or right element is not a number, look up the value of the variable. 
-      ((not(number? (get_element 1 expression))) (M_boolean (list (get_element 0 expression) (M_state_lookup (get_element 1 expression) declared_list value_list) (get_element 2 expression)) declared_list value_list));added on plane
-      ((not(number? (get_element 2 expression))) (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_state_lookup (get_element 2 expression) declared_list value_list) ) declared_list value_list));added on plane
+      ((not(number? (get_element 1 expression)))
+       (M_boolean (list (get_element 0 expression) (M_state_lookup (get_element 1 expression) state) (get_element 2 expression)) state));added on plane
+      ((not(number? (get_element 2 expression)))
+       (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_state_lookup (get_element 2 expression) state) ) state));added on plane
 
 
       ((eq? (car expression) '==) (M_boolean_equal (get_element 1 expression) (get_element 2 expression)))
@@ -560,11 +637,11 @@
     )))
 
 (define M_boolean_truth_finder
-  (lambda (var declared_list value_list)
+  (lambda (var state)
     (cond
       ((null? var) #f)
       ((boolean? var) var)
-      ((member? var declared_list) (M_boolean_tf_to_hashtags(M_state_lookup var declared_list value_list)))
+      ((member? var (get_element 0 state)) (M_boolean_tf_to_hashtags(M_state_lookup var state)))
       ((eq? var 'true) #t)
       ((eq? var 'false) #f)
       (else (error "our version of variable not initialized"))
@@ -664,13 +741,13 @@
       )))
 
 (define M_state_return_helper
-  (lambda (var declared_list value_list)
+  (lambda (var state)
     (cond
       ((null? var) 'null)
       ((number? var) var)
-      ((member? var declared_list) (M_state_lookup var declared_list value_list))  
-      ((and (list? var) (boolean_operator? (car var))) (M_boolean var declared_list value_list))
-      ((list? var) (M_value var declared_list value_list))
+      ((member? var (get_element 0 state)) (M_state_lookup var state))  
+      ((and (list? var) (boolean_operator? (car var))) (M_boolean var state))
+      ((list? var) (M_value var state))
       (else (error "invalid return"))
        )))
 
@@ -697,10 +774,10 @@
 
 
 
-;These should error
-;(interpret "Unit Tests/fileToParseTest3-1.txt")
-;(interpret "Unit Tests/fileToParseTest3-2.txt")
-;(interpret "Unit Tests/fileToParseTest3-3.txt")
+
+(interpret "Unit Tests/fileToParseTest3-1.txt")
+(interpret "Unit Tests/fileToParseTest3-2.txt")
+(interpret "Unit Tests/fileToParseTest3-3.txt")
 (interpret "Unit Tests/fileToParseTest3-4.txt")
 ;(interpret "Unit Tests/fileToParseTest3-5.txt")
 ;(interpret "Unit Tests/fileToParseTest3-6.txt")
