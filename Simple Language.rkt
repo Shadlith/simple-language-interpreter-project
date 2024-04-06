@@ -22,11 +22,9 @@
     (newline)
     (let ((x (M_state_closure_maker parsed (list (list(list(box 'return))) (list(list(box 'null))) '(()) '(())))))
     (display "closure: ") (print x)
-    (call/cc (lambda (return1) (M_value_call_function 'main '(())
-                           (list (get_element 0 x) (get_element 1 x) (get_element 2 x) (get_element 3 x)) return1))))
-     ;(call/cc (lambda (return) (call_main_function 'main '(()) (get_element 1 (car (get_element 3 state))
-      ;                     (list (get_element 0 x) (get_element 1 x) (get_element 2 x) (get_element 3 x)) return))))
-
+    (answer_converter (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function 'main '(())
+                           (list (get_element 0 x) (get_element 1 x) (get_element 2 x) (get_element 3 x)) return1))))))
+    
     ; We need other functions to deal with function calls in them. Test 4 fails right now b/c return doesn't know what to do with a function. 
     ))
 
@@ -46,6 +44,13 @@
        
      ((or (eq? 'var (caar lis)) (eq? '= (caar lis))) (evaluate lis state '() '()' ()))
       )))
+
+(define answer_converter
+  (lambda (var)
+    (cond
+      ((and (boolean? var) var) 'true)
+      ((boolean? var) 'false)
+      (else var))))
 
 (define call_main_function
   (lambda (func_name actual_params main_body state return)
@@ -138,14 +143,30 @@
 
 (define evaluate
   (lambda (lis state return break try)
-    ;(newline) (display "declared list at top of evaluate") (display declared_list)
-    ;(newline) (display "value list at top of evaluate") (display value_list)
+   ; (newline) (display "state at top of evaluate") (display state)
+   ; (newline) (display "lis at top of evaluate") (display lis)
     (cond
       ((null? lis) state)
       ((null? (car lis)) state)
       ((eq? 'function (caar lis)) (M_state_closure_maker lis state))
-      ((and (eq? 'funcall (caar lis)) (eq? 2 (length lis))) (evaluate (call/cc (lambda (return1) (M_value_call_function (cadar lis) '() state return1))))
-      ((eq? 'funcall (caar lis)) (call/cc (lambda (return1) (M_value_call_function (cadar lis) (cddar lis) state return1))))
+      ((and (eq? 'funcall (caar lis)) (eq? 2 (length (car lis)))) (evaluate (cdr lis) (list (get_element 0 state)
+                                                                                 (M_state_sync_value_list (list (get_element 0 state)
+                                                                                                                (get_element 1 (call/cc (lambda (return1) (M_value_call_function (cadar lis) '() state return1))))
+                                                                                                                (get_element 2 state)
+                                                                                                                (get_element 3 state))) 
+                                                                                 (get_element 2 state)
+                                                                                 (get_element 3 state))
+                                                                      return break try))
+      
+      ((eq? 'funcall (caar lis)) (evaluate (cdr lis) (list (get_element 0 state)
+                                                                                 (M_state_sync_value_list (list (get_element 0 state)
+                                                                                                                (get_element 1 (call/cc (lambda (return1) (M_value_call_function (cadar lis) (cddar lis) state return1))))
+                                                                                                                (get_element 2 state)
+                                                                                                                (get_element 3 state))) 
+                                                                                 (get_element 2 state)
+                                                                                 (get_element 3 state))
+                                                                      return break try))
+
       ((eq? 'var (caar lis)) (M_state_declaration lis state return break try))
       ((eq? '= (caar lis)) (M_state_assignment lis state return break try))
       ((eq? 'if (caar lis)) (M_state_if lis state return break try))
@@ -167,13 +188,13 @@
       
       ; when it's return and a boolean, this gets it to be "true" or "false"
       ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) state)) (get_element 2 state) (get_element 3 state)))))
-       (return (M_boolean_truefalse_converter(M_state_lookup 'return (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) state)) (get_element 2 state) (get_element 3 state))))))
+       (return (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) state)) (get_element 2 state) (get_element 3 state))))
 
       ((and (eq? 'return (caar lis)) (number? (cadar lis)))
-        (return (cadar lis))) 
+        (return (list (get_element 0 state) (M_state_modify_value_list state 'return (cadar lis)) (get_element 2 state) (get_element 3 state)))) 
       
       ((eq? 'return (caar lis))
-       (return (M_state_lookup 'return (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) state)) (get_element 2 state) (get_element 3 state)))))
+       (return (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) state)) (get_element 2 state) (get_element 3 state))))
 
       
       ((eq? 'begin (caar lis)) (evaluate (cdr lis) (list (get_element 0 state)
@@ -189,7 +210,7 @@
                                           (get_element 3 state))
                                          return break try))
 
-      ((eq? 'continue (caar lis))(evaluate '() state return break try))
+      ((eq? 'continue (caar lis)) (evaluate '() state return break try))
 
       ((eq? 'break (caar lis))(break (list (get_element 0 state) (M_state_sync_value_list state) (get_element 2 state) (get_element 3 state))))
 
@@ -555,31 +576,31 @@
 
       ;these are for "funcall"'s that don't have actual parameters 
       ((and (eq? 2 (length expression)) (eq? 'funcall (get_element 0 expression)))
-       (call/cc (lambda (return1) (M_value_call_function (get_element 1 expression) '() state return1))))
+       (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function (get_element 1 expression) '() state return1)))))
       
       ((and (and (list? (get_element 1 expression)) (eq? 2 (length (get_element 1 expression)))) (eq? 'funcall (car (get_element 1 expression))))
        (M_value (list (get_element 0 expression)
-                      (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 1 expression)) '() state return1)))
+                      (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 1 expression)) '() state return1))))
                       (get_element 2 expression)) state))
 
       ((and (and (list? (get_element 2 expression)) (eq? 2 (length (get_element 2 expression)))) (eq? 'funcall (car (get_element 2 expression))))
        (M_value (list (get_element 0 expression)
                       (get_element 1 expression)
-                      (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 2 expression)) '() state return1)))) state))
+                      (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 2 expression)) '() state return1)))) state)))
 
       ; the rest of these "funcall" ones are if there are actual params passed in
       ((eq? 'funcall (get_element 0 expression))
-       (call/cc (lambda (return1) (M_value_call_function (get_element 1 expression) (cddr expression) state return1))))
+       (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function (get_element 1 expression) (cddr expression) state return1)))))
       
       ((and (list? (get_element 1 expression)) (eq? 'funcall (car (get_element 1 expression))))
        (M_value (list (get_element 0 expression)
-                      (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 1 expression)) (list (get_element 2 (get_element 1 expression))) state return1)))
+                      (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 1 expression)) (list (get_element 2 (get_element 1 expression))) state return1))))
                       (get_element 2 expression)) state))
 
       ((and (list? (get_element 2 expression)) (eq? 'funcall (car (get_element 2 expression))))
        (M_value (list (get_element 0 expression)
                       (get_element 1 expression)
-                      (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 2 expression)) (list (get_element 2 (get_element 2 expression))) state return1)))) state))
+                      (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function (get_element 1 (get_element 2 expression)) (list (get_element 2 (get_element 2 expression))) state return1))))) state))
       
       ((list? (get_element 1 expression))
        (M_value (list (get_element 0 expression)
@@ -838,8 +859,8 @@
         ((not (eq? (interpret "Unit Tests/fileToParseTest3-7.txt") 'true)) (error "Test 3-7 failed"))
         ((not (eq? (interpret "Unit Tests/fileToParseTest3-8.txt") 20)) (error "Test 3-8 failed"))
         ((not (eq? (interpret "Unit Tests/fileToParseTest3-9.txt") 24)) (error "Test 3-9 failed"))
-        ;((not (eq? (interpret "Unit Tests/fileToParseTest3-10.txt") 2)) (error "Test 3-10 failed"))
-        ;((not (eq? (interpret "Unit Tests/fileToParseTest3-11.txt") 35)) (error "Test 3-11 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest3-10.txt") 2)) (error "Test 3-10 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest3-11.txt") 35)) (error "Test 3-11 failed"))
         ;((not (eq? (interpret "Unit Tests/fileToParseTest3-13.txt") 90)) (error "Test 3-11 failed"))
        ; ((not (eq? (interpret "Unit Tests/fileToParseTest3-14.txt") 12)) (error "Test 2-14 failed"))
         #|
@@ -850,13 +871,13 @@
         |#
         (display "all tests passed")
         )))
-;(tests3)
+(tests3)
 
 
 
 
 
-(interpret "Unit Tests/fileToParseTest3-10.txt")
+;(interpret "Unit Tests/fileToParseTest3-10.txt")
 ;(interpret "Unit Tests/fileToParseTest3-5.txt")
 ;(interpret "Unit Tests/fileToParseTest3-6.txt")
 
