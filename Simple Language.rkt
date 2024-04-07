@@ -11,13 +11,7 @@
     (parser filename)
     ))
 
-;(((#&return)) ((#&null)) ((#&main) (#&fib)) (((() ((return (funcall fib 10))) 1)) (((a) ((if (== a 0) (return 0) (if (== a 1) (return 1) (return (+ (funcall fib (- a 1)) (funcall fib (- a 2))))))) 1))))
-;'(((#&r #&y #&x #&return)) ((#&0 #&10 #&1 #&null)) ((#&main)) (((() ((while (< x y) (begin (= r (+ r x)) (= x (+ x 1)))) (return r)) 1))))
 
-
-
-
-;code to run on: (interpret "fileToParse.txt")
 (define interpret
   (lambda (filename)
     (define parsed (parse filename))
@@ -26,9 +20,7 @@
     (let ((x (M_state_closure_maker parsed (list (list(list(box 'return))) (list(list(box 'null))) '(()) '(())))))
     (display "closure: ") (print x)
     (answer_converter (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function 'main '(())
-                           (list (get_element 0 x) (get_element 1 x) (get_element 2 x) (get_element 3 x)) return1 '() '()))) '() '())))
-    
-    ; We need other functions to deal with function calls in them. Test 4 fails right now b/c return doesn't know what to do with a function. 
+                           (list (get_element 0 x) (get_element 1 x) (get_element 2 x) (get_element 3 x)) return1 '() '()))) '() '()))) 
     ))
 
 
@@ -58,13 +50,7 @@
 (define M_value_call_function
  (lambda (func_name actual_params state return break try)
    (cond 
-     ((null? (get_element 2 state)) (error "function not in func_name list"))
-     ;((list? (car (get_element 2 state))) (call/cc (lambda (return1) (M_value_call_function func_name actual_params (list (get_element 0 state)
-                                                                                            ;   (get_element 1 state)
-                                                                                              ; (car (get_element 2 state))
-                                                                                               ;(car (get_element 3 state)))return1))))
-
-      
+     ((null? (get_element 2 state)) (error "function not in func_name list"))    
      ((member? func_name (get_element 2 state))
       (call/cc (lambda (return1) (evaluate (get_element 1 (M_state_func_lookup func_name state))
                                            (let ((x (M_state_func_environment_shell (get_element 2 (M_state_func_lookup func_name state))
@@ -331,8 +317,6 @@
                        (get_element 3 state))
                  return break try))
 
-      ;((eq? 'funcall (car (get_element 2
-
       ;if the first word is "var" and there is more in this sublist than just the declaration aka our first word is var and it's not of the others ex: var x = 5+7
       (else (evaluate (cdr lis)
                  (list (M_state_add_to_declared_list (get_element 0 state) (cadar lis))
@@ -341,8 +325,6 @@
                        (get_element 3 state))
                  return break try))
       )))
-
-; 4-4-24: This is where we stopped teh state conversion 
 
 (define M_state_assignment
   (lambda (lis state return break try)
@@ -498,7 +480,6 @@
 (define M_state_add_to_value_list
   (lambda (value_list val)
     (cond
-      ;((not(or (or (number? val) (eq? 'true val)) (eq? 'false val))) (error "our version of variable not initialized"))
       ((list? val) (error "val is a list for some reason"))
       (else (cons (cons (box val) (car value_list)) (cdr value_list)))
        )))
@@ -522,10 +503,8 @@
                                                                           (get_element 3 state))
                                                                           var newval break try)))
       
-      ; 3-12: This eq line is where we have an issue.....both don't work
-      ((eq? var (unbox (car (get_element 0 state)))) (set-box! (car (get_element 1 state)) newval) (get_element 1 state))
-      ; the set-box! works.....except for the last test of Part 1.....so, we're not going to do it (for now)
-      ;((eq? var (unbox (car declared_list))) (begin (set-box! (car value_list) newval) value_list))
+     
+      ((eq? var (unbox (car (get_element 0 state)))) (set-box! (car (get_element 1 state)) newval) (get_element 1 state))   
       (else (cons (car (get_element 1 state)) (M_state_modify_value_list (list (cdr (get_element 0 state))
                                                                                (cdr (get_element 1 state))
                                                                                (get_element 2 state)
