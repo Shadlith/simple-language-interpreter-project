@@ -74,7 +74,7 @@
                                                        (cadr x)
                                                        (M_state_add_row_to_list (get_element 2 state))
                                                        (M_state_add_row_to_list (get_element 3 state))))
-                                           return1 '() '()))))
+                                           return1 break try))))
      
      (else (call/cc (lambda (return1) (M_value_call_function func_name actual_params
                                   (list (get_element 0 state) (get_element 1 state) (cdr (get_element 2 state)) (cdr (get_element 3 state))) return1 break try))))
@@ -213,22 +213,27 @@
       ((eq? 'break (caar lis))(break (list (get_element 0 state) (M_state_sync_value_list state) (get_element 2 state) (get_element 3 state))))
 
       ; hit "try", "finally" doesn't exist, throw is triggered.
-      ((and (and (eq? 'try (caar lis)) (null? (get_element 3 (car lis))))  (eq? 3 (length(M_state_try (get_element 1 (car lis)) state return break try))))
+      ((and (and (eq? 'try (caar lis)) (null? (get_element 3 (car lis))))  (eq? 2 (length(M_state_try (get_element 1 (car lis)) state return break try))))
+       (let ((x (M_state_try (get_element 1 (car lis)) state return break try)))
        (evaluate (cdr lis) (list (get_element 0 state)                
                                         (M_state_sync_value_list (list (get_element 0 state)
                                                                        (cadr (M_state_catch
                                                                               (get_element 2 (car lis))
                                                                               (list (get_element 0 state)
-                                                                              (M_state_sync_value_list (list (get_element 0 state) (cadr (M_state_try (get_element 1 (car lis)) state return break try)) (get_element 2 state) (get_element 3 state)))
+                                                                              (M_state_sync_value_list (list (get_element 0 (get_element 0 x))
+                                                                                                             (cadar x)
+                                                                                                             ; ^ this might be wrong
+                                                                                                             (get_element 2 state)
+                                                                                                             (get_element 3 state)))
                                                                               (get_element 2 state)
                                                                               (get_element 3 state))
-                                                                              (caddr (M_state_try (get_element 1 (car lis)) state return break try))
+                                                                              (M_value (list (list-ref x 1)) (car x) break try)
                                                                               return break try))
                                                                        (get_element 2 state)
                                                                        (get_element 3 state)))                                     
                                         (get_element 2 state)
                                         (get_element 3 state)
-                                        return break try)))
+                                        return break try))))
       
       ; hit "try", "finally" doesn't exist, throw is not triggered.
       ((and (eq? 'try (caar lis)) (null? (get_element 3 (car lis))))
@@ -242,7 +247,8 @@
                                         return break try))
 
        ; hit "try", "finally" does exist, throw is triggered.
-      ((and (eq? 'try (caar lis)) (eq? 5 (length(M_state_try (get_element 1 (car lis)) state return break try))))
+      ((and (eq? 'try (caar lis)) (eq? 2 (length(M_state_try (get_element 1 (car lis)) state return break try))))
+       (let ((x (M_state_try (get_element 1 (car lis)) state return break try)))
        (evaluate (cdr lis) (list (get_element 0 state)
                  (cadr (M_state_finally (cadr(get_element 3 (car lis)))
                                         (list (get_element 0 state)
@@ -251,13 +257,12 @@
                                                (cadr (M_state_catch (get_element 2 (car lis))
                                                                     (list (get_element 0 state)
                                                                           (M_state_sync_value_list (list (get_element 0 state)
-                                                                                                         (cadr (M_state_try (get_element 1 (car lis)) state return break try))
+                                                                                                         (cadar x)
                                                                                                          (get_element 2 state)
                                                                                                          (get_element 3 state)))
                                                                           (get_element 2 state)
                                                                           (get_element 3 state))
-                                                                    (cadr (M_state_try (get_element 1 (car lis)) state return break try))
-                                                                    ; ^ this may be wrong
+                                                                    (M_value (list (list-ref x 1)) (car x) break try)
                                                                     return break try))
                                                (get_element 2 state)
                                                (get_element 3 state)))
@@ -266,8 +271,8 @@
                                          return break try)
                                         return break try))
                  (get_element 2 state)
-                 (get_element 3 state)
-                 return break try)))
+                 (get_element 3 state))
+                 return break try))) 
 
       ; hit "try", "finally" does exist, throw is not triggered.
       ((eq? 'try (caar lis))
@@ -577,6 +582,8 @@
     (cond
       ((null? expression) '())
       ((number? expression) expression)
+      ((number? (car expression)) (car expression))
+      ((member? (get_element 0 expression) (get_element 0 state)) (M_state_lookup (get_element 0 expression) state break try))
       ((and (and (eq? (length expression) 2) (eq? (car expression) '-))) 
        (* -1 (M_value (get_element 1 expression) state break try)))
        
@@ -852,7 +859,7 @@
         ((not (eq? (interpret "Unit Tests/fileToParseTest3-15.txt") 87)) (error "Test 3-15 failed"))
         ((not (eq? (interpret "Unit Tests/fileToParseTest3-18.txt") 125)) (error "Test 3-18 failed"))
         ((not (eq? (interpret "Unit Tests/fileToParseTest3-19.txt") 100)) (error "Test 3-19 failed"))
-        ;((not (eq? (interpret "Unit Tests/fileToParseTest3-18.txt") 101)) (error "Test 2-18 failed"))
+       ; ((not (eq? (interpret "Unit Tests/fileToParseTest3-20.txt") 2000400)) (error "Test 2-18 failed"))
         
         (display "all tests passed")
         )))
@@ -862,7 +869,7 @@
 
 
 
-;(interpret "Unit Tests/fileToParseTest3-16test.txt")
+;(interpret "Unit Tests/fileToParseTest3-20.txt")
 ;(interpret "Unit Tests/fileToParseTest3-5.txt")
 ;(interpret "Unit Tests/fileToParseTest3-6.txt")
 
