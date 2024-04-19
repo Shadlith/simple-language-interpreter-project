@@ -4,7 +4,8 @@
 ; Simple Language Interpreter
 
 ;(require "sectionParser.rkt")
-(require "functionParser.rkt")
+;(require "functionParser.rkt")
+(require "classParser.rkt")
 
 (define parse
   (lambda (filename)
@@ -12,30 +13,160 @@
     ))
 
 
+#|
+((class A () ((var x 5) (var y 10) (static-function main () ((var a (new A)) (return (+ (dot a x) (dot a y))))))))
+
+Test 7: 
+((class A () ((var x 1) (var y 2) (function m () ((return (funcall (dot this m2))))) (function m2 () ((return (+ (dot this x) (dot this y)))))))
+  (class B
+    (extends A)
+    ((var y 22) (var z 3) (function m () ((return (funcall (dot super m))))) (function m2 () ((return (+ (+ (dot this x) (dot this y)) (dot this z)))))))
+  (class C (extends B) ((var y 222) (var w 4) (function m () ((return (funcall (dot super m))))) (static-function main () ((return (funcall (dot (new C) m))))))))
+
+Test 8:
+'((class A () ((function add (g h) ((return (+ g h)))) (static-function main () ((var a (new A)) (return (funcall (dot a add) 10 2)))))))
+
+
+|#
+
 (define interpret
-  (lambda (filename)
+  (lambda (filename classname)
     (define parsed (parse filename))
     (print parsed);just to see what it outputs
     (newline)
-    (let ((x (M_state_closure_maker parsed (list (list(list(box 'return))) (list(list(box 'null))) '(()) '(())))))
+    (let ((x (M_state_function_closure_maker parsed (list (list(list(box 'return))) (list(list(box 'null))) '(()) '(())))))
     (display "closure: ") (print x)
     (answer_converter (M_state_lookup 'return (call/cc (lambda (return1) (M_value_call_function 'main '(())
                            (list (get_element 0 x) (get_element 1 x) (get_element 2 x) (get_element 3 x)) return1 '() '()))) '() '()))) 
     ))
 
+;For Part 3, we had the state have 4 elements:
+; Element 0 = declared_list
+; Element 1 = value_list
+; Element 2 = func_name_list
+; Element 3 = func_closure_list
 
-(define M_state_closure_maker
+; For Part 3, the function closure contains:
+;     formal parameter list
+;     the function body
+;     a function that creates the function environment from the current environment.
+
+; For Part 4, we're going to have 2 "state" variables variables:
+; "class_info" and "state"
+; "class_info" contains the following (and is made once and never changed): 
+;     Element 0 = class_name_list
+;     Element 1 = class_closure_list
+; "state" containst he following: 
+; You add a layer when you hit a curly bracket.
+; Layer 0: Element 0 = declared_list
+;          Element 1 = value_list (which will either be a value or an instance closure)
+; Layer 1: (same format as Layer 0)
+
+; For Part 4, the method closure contains:
+;     formal parameter list (Add "this" as an additional parameter to the parameter list in each (non-static) function's closure.)
+;     the body of the method
+;     a function that creates the method environment from the current environment.
+;     a function (or equivalent information) so that you can look up the function's class in the environment/state.
+;           this is the compile time type of "this" in the method body. 
+
+
+; For Part 4, the class closure contains:
+;     super class
+;     list of instance field names
+;     list of instance values* 
+;     list of methods/function names
+;     list of methods/function closures
+;     (maybe) any nested types (things that extend this function)
+; * we added this against instructions
+
+
+; For Part 4, the instance closure contains:
+;     run-time type of the instance
+;     instance field names*
+;     the values of all instance fields
+; * we added this against instructions
+
+; this makes a singular class closure with 5 elements in it
+(define M_state_class_closure_maker
+  (lambda (lis output)
+    (cond
+      ((null? lis) output)
+      ; if this class does extend another class
+      ((and (eq? 'class (car lis)) (not (null? (get_element 2 lis)))) 
+       (M_state_class_closure_maker (get_element 3 lis) (list
+                                                (get_element 1 (get_element 2 lis))
+                                                (get_element 1 output)
+                                                (get_element 2 output)
+                                                (get_element 3 output)
+                                                (get_element 4 output))))
+      ; if this class does NOT extend another class
+      ((eq? 'class (car lis)) 
+       (M_state_class_closure_maker (get_element 3 lis) output))
+
+      ; if we're on a line that declares an instance field
+      ((eq? 'var (caar lis))
+       (M_state_class_closure_maker (cdr lis) (list
+                                               (get_element 0 output)
+                                               (cons (get_element 1 (car lis)) (get_element 1 output))
+                                               (cons (get_element 2 (car lis)) (get_element 2 output))
+                                               (get_element 3 output)
+                                               (get_element 4 output))))
+
+      ; if we're on a line for a function or the main, then add the name to the function list and function closure
+      ((or (eq? 'function (caar lis)) (eq? 'static-function (caar lis)))
+       (M_state_class_closure_maker (cdr lis) (list
+                                               (get_element 0 lis)
+                                               (get_element 1 output)
+                                               (get_element 2 output)
+                                               (cons (get_element 1 lis) (get_element 3 output))
+                                               (cons (list (get_element 2 lis) (get_element 3 lis) 1) (get_element 4 output)) ;<- 1 is hard-coded b/c we think that we'll always have to pull from layer 1 since we don't have to deal with nested functions
+                                               )))
+      )))
+
+
+
+(define M_state_get_class_closure_info
+  (lambda (class_name class_info)
+    (cond
+      ((null? (get_element 0 class_info)) (error "class doesn't exist"))
+      ((eq? class_name (car (get_element 0 class_info))) (car (get_element 1 class_info)))
+      (else (M_state_get_class_closure_info class_name (list (cdr (get_element 0 class_info)) (cdr (get_element 1 class_info)))))
+      )))
+
+
+; "lis" is just the list that contains the "new". We want to output a state with an updated value_list where the "value" for the variable
+; mapped to this Object is the instance closure. 
+(define M_state_instance_closure_maker
+  (lambda (class_name class_info) 
+   (list class_name #| STUFF|# (M_state_get_class_closure_info class_name class_info))
+      ))
+
+
+;We need to see if we need this....we should just be able to pull from the value list....but we need to figure out when we need that info.
+#|
+(define M_state_get_instance_closure_info
+  (lambda (class_name class_info)
+    (cond
+      ((null? (get_element 0 class_info)) (error "class doesn't exist"))
+      ((eq? class_name (car (get_element 0 class_info))) (car (get_element 1 class_info)))
+      (else (M_state_get_class_closure_info class_name (list (cdr (get_element 0 class_info)) (cdr (get_element 1 class_info)))))
+      )))
+|#
+
+
+(define M_state_function_closure_maker
   (lambda (lis state)
     (cond
       ((null? lis) state)
       
       ((eq? 'function (caar lis))
-       (M_state_closure_maker (cdr lis)
+       (M_state_function_closure_maker (cdr lis)
                               (list (get_element 0 state) (get_element 1 state)
                               (M_state_add_to_func_name_list (get_element 2 state) (cadar lis))
                               (M_state_add_to_func_closure_list (get_element 3 state)
                                                                 (list(get_element 2 (car lis)) (get_element 3 (car lis)) (length (get_element 0 state)))))))
-                              
+
+      ; global parameter reading, "evaluate" comes back up here if it hits the word "function"                         
      ((or (eq? 'var (caar lis)) (eq? '= (caar lis))) (evaluate lis state '() '()' ()))
       )))
 
@@ -132,7 +263,7 @@
     (cond
       ((null? lis) state)
       ((null? (car lis)) state)
-      ((eq? 'function (caar lis)) (evaluate (cdr lis) (M_state_closure_maker (list (car lis)) state) return break try))
+      ((eq? 'function (caar lis)) (evaluate (cdr lis) (M_state_function_closure_maker (list (car lis)) state) return break try))
       ((and (eq? 'funcall (caar lis)) (eq? 2 (length (car lis)))) (evaluate (cdr lis) (list (get_element 0 state)
                                                                                  (M_state_sync_value_list (list (get_element 0 state)
                                                                                                                 (get_element 1 (call/cc (lambda (return1) (M_value_call_function (cadar lis) '() state return1 break try))))
@@ -842,9 +973,9 @@
         
         (display "all tests passed")
         )))
-(tests3)
+;(tests3)
 
-
+(interpret "Unit Tests/fileToParseTest4-1.txt" "A")
 
 
 
