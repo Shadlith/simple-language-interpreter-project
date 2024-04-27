@@ -205,8 +205,16 @@ Test 4:
 (define M_state_instance_closure_maker
   (lambda (class_name class_info)
     (let ((x (M_state_get_class_closure_info class_name class_info)))
-      (list class_name (get_element 1 x) (get_element 2 x)))
+      (list class_name (box_elements (get_element 1 x)) (box_elements (get_element 2 x))))
       ))
+
+(define box_elements
+  (lambda (lis)
+    (cond
+      ((null? lis) lis)
+      ((list? (car lis)) (cons (box_elements (car lis)) (box_elements (cdr lis))))
+      (else (cons (box (car lis)) (box_elements (cdr lis))))
+      )))
 
 
 ;We need to see if we need this....we should just be able to pull from the value list....but we need to figure out when we need that info.
@@ -273,19 +281,34 @@ Test 4:
   (lambda (fields lis)
     (cond
       ((null? fields) lis)
-      (else (cons (M_state_add_parameters_to_state (cdr fields) (cons (box (car fields)) (car lis))) (cdr lis)))
+      (else (cons (cons (box (car fields)) (car (M_state_add_parameters_to_state (cdr fields) lis))) (cdr (M_state_add_parameters_to_state (cdr fields) lis))))
       )))
 
 (define M_state_instance_field_lookup_shell
   (lambda (field_name instance_name class_info state break try)
-    (M_state_field_lookup field_name (M_state_lookup instance_name class_info state break try))))
+    (cond
+      ((list? (M_state_lookup instance_name class_info state break try))
+       (M_state_field_lookup field_name (M_state_lookup instance_name class_info state break try)))
+      (else (M_state_instance_field_lookup_shell field_name (M_state_lookup instance_name class_info state break try) class_info state break try))
+       )))
   
              
 (define M_state_field_lookup
   (lambda (field_name instance_closure)
     (cond
-      ((null? (instance_closure)) (error "variable not in instance closure"))
-      ((eq? field_name (car (get_element 1 instance_closure))) (car (get_element 2 instance_closure)))
+      ((null? instance_closure) (error "variable not in instance closure"))
+      ((eq? field_name (unbox (car (get_element 1 instance_closure)))) (unbox (car (get_element 2 instance_closure))))
+      (else (M_state_field_lookup field_name (list
+                                              (get_element 0 instance_closure)
+                                              (cdr (get_element 1 instance_closure))
+                                              (cdr (get_element 2 instance_closure)))))
+      )))
+
+(define M_state_field_lookup_boxed
+  (lambda (field_name instance_closure)
+    (cond
+      ((null? instance_closure) (error "variable not in instance closure"))
+      ((eq? field_name (unbox (car (get_element 1 instance_closure)))) (car (get_element 2 instance_closure)))
       (else (M_state_field_lookup field_name (list
                                               (get_element 0 instance_closure)
                                               (cdr (get_element 1 instance_closure))
@@ -295,7 +318,7 @@ Test 4:
 ;We may need to add a cond here if we need to deal with a field being an object
 (define M_state_modify_field_value
   (lambda (field_name instance_closure newval)
-    (set-box! (M_state_field_lookup field_name instance_closure) newval)
+    (set-box! (M_state_field_lookup_boxed field_name instance_closure) newval)
     ))
       
 
@@ -387,13 +410,13 @@ Test 4:
       ;if 'funcall with parameters
       ((eq? 'funcall (caar lis)) (evaluate (cdr lis) class_info (list (get_element 0 state)
                                                                                  (M_state_sync_value_list (list (get_element 0 state)
-                                                                                                                (get_element 1 (call/cc (lambda (return1)
+                                                                                                                (get_element 1 (get_element 1 (call/cc (lambda (return1)
                                                                                                                                           (M_value_call_function
                                                                                                                                            (get_element 2 (get_element 1 (car lis)))
                                                                                                                                            (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (car lis))) class_info state break try))
                                                                                                                                            (get_element 1 (get_element 1 (car lis)))
                                                                                                                                            (cddr (car lis)) ; we THINK this gets the parameter list, neeed cddr b/c it may be a list of parameters
-                                                                                                                                           class_info state return1 break try))))
+                                                                                                                                           class_info state return1 break try)))))
                                                                                                                 (get_element 2 state)
                                                                                                                 (get_element 3 state))) 
                                                                                  (get_element 2 state)
@@ -623,9 +646,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (list? (caddar lis))) (boolean_operator? (car (caddar lis)))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_instance_field_lookup_shell
-         (get_element 2 (cadar lis))
-         (get_element 1 (cadar lis))
+        (M_state_lookup (get_element 1 (cadar lis))
          class_info state break try)
         (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state break try)))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -643,11 +664,12 @@ Test 4:
       ((and (and (list? caddar) (eq? 'dot (get_element 0 (caddar lis)))) (and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_instance_field_lookup_shell
-         (get_element 2 (cadar lis))
-         (get_element 1 (cadar lis))
+        (M_state_lookup (get_element 1 (cadar lis))
          class_info state break try)
-        (M_state_instance_field_lookup_shell (get_element 2 (caddar lis)) (get_element 1 (caddar lis)) class_info state break try))
+        (M_state_instance_field_lookup_shell
+         (get_element 2 (caddar lis))
+         (get_element 1 (caddar lis))
+         class_info state break try))
        (evaluate (cdr lis) class_info state compile_type return break try))
       
       ;....and the left side does NOT have "dot" in it ex: y = this.x
@@ -665,9 +687,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (list? (caddar lis))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_instance_field_lookup_shell
-         (get_element 2 (cadar lis))
-         (get_element 1 (cadar lis))
+        (M_state_lookup (get_element 1 (cadar lis))
          class_info state break try)
         (M_value (caddar lis) class_info state break try))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -685,9 +705,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (number? (caddar lis))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_instance_field_lookup_shell
-         (get_element 2 (cadar lis))
-         (get_element 1 (cadar lis))
+        (M_state_lookup (get_element 1 (cadar lis))
          class_info state break try)
         (caddar lis))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -706,9 +724,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (member? (caddar lis) (get_element 0 state))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_instance_field_lookup_shell
-         (get_element 2 (cadar lis))
-         (get_element 1 (cadar lis))
+        (M_state_lookup (get_element 1 (cadar lis))
          class_info state break try)
         (M_state_lookup (caddar lis) class_info state break try))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -875,6 +891,7 @@ Test 4:
   (lambda (var class_info state break try)
     (cond
       ((null? (get_element 0 state)) (error "variable not found"))
+      ((eq? 'this var) (M_state_lookup_this class_info state state break try))
       ((and (and (list? (car (get_element 0 state))) (member? var (car (get_element 0 state)))) (not(null? (car (get_element 0 state)))))
        (M_state_lookup var class_info (list (car (get_element 0 state))
                                  (car (get_element 1 state))
@@ -886,12 +903,33 @@ Test 4:
                                                                      (get_element 2 state)
                                                                      (get_element 3 state)) break try))
       
-      ((eq? var (unbox (car (get_element 0 state)))) (variable_type?(unbox (car (get_element 1 state))) class_info break try))
+      ((eq? var (unbox (car (get_element 0 state)))) (variable_type? (unbox (car (get_element 1 state))) class_info break try))
       (else (M_state_lookup var class_info (list (cdr (get_element 0 state))
                                       (cdr (get_element 1 state))
                                       (get_element 2 state)
                                       (get_element 3 state)) break try))
       )))
+
+(define M_state_lookup_this
+  (lambda (class_info original_state state break try)
+    (cond
+      ((null? (get_element 0 state)) (error "'this' doesn't exist"))
+      ((and (and (list? (car (get_element 0 state))) (member? 'this (car (get_element 0 state)))) (not(null? (car (get_element 0 state)))))
+       (M_state_lookup_this class_info original_state (list (car (get_element 0 state))
+                                 (car (get_element 1 state))
+                                 (get_element 2 state)
+                                 (get_element 3 state)) break try))
+      
+      ((list? (car (get_element 0 state)))
+       (M_state_lookup_this class_info original_state (list (cdr (get_element 0 state))
+                                                                     (cdr (get_element 1 state))
+                                                                     (get_element 2 state)
+                                                                     (get_element 3 state)) break try))
+      
+      ((eq? 'this (unbox (car (get_element 0 state)))) (M_state_lookup (unbox (car (get_element 1 state))) class_info original_state break try))
+      (else (M_state_lookup_this class_info original_state (cdr state) break try))
+      )))
+      
 
 (define M_state_func_lookup
   (lambda (var state)
@@ -1083,12 +1121,48 @@ Test 4:
        (M_boolean_tf_to_hashtags (and (M_boolean_truth_finder (get_element 1 expression) class_info state break try) (M_boolean_truth_finder (get_element 2 expression) class_info state break try))))
       ((eq? (car expression) '||)
        (M_boolean_tf_to_hashtags (or (M_boolean_truth_finder (get_element 1 expression) class_info state break try) (M_boolean_truth_finder (get_element 2 expression) class_info state break try))))
+
+       ; if the left or right element is not a number, look up the value of the variable.
+      ;.... and it's a "dot"
+      ((and (list? (get_element 1 expression)) (eq? 'dot (get_element 0 (get_element 1 expression))))
+       (M_boolean (list
+                   (get_element 0 expression)
+                   (M_state_instance_field_lookup_shell
+                    (get_element 2 (get_element 1 expression))
+                    (get_element 1 (get_element 1 expression))
+                    class_info state break try)
+                   (get_element 2 expression))
+                  class_info state break try))
+
+      ((and (list? (get_element 2 expression)) (eq? 'dot (get_element 0 (get_element 2 expression))))
+       (M_boolean (list
+                   (get_element 0 expression)
+                   (get_element 1 expression)
+                   (M_state_instance_field_lookup_shell
+                    (get_element 2 (get_element 2 expression))
+                    (get_element 1 (get_element 2 expression))
+                    class_info state break try))
+                  class_info state break try))
       
-      ; if the left or right element is not a number, look up the value of the variable. 
+      ; if the left or right element is not a number, look up the value of the variable.
+      ;,....and it's not a "dot"
       ((not(number? (get_element 1 expression)))
-       (M_boolean (list (get_element 0 expression) (M_state_lookup (get_element 1 expression) class_info state break try) (get_element 2 expression)) class_info state break try));added on plane
+       (M_boolean (list
+                   (get_element 0 expression)
+                   (M_state_lookup
+                    (get_element 1 expression)
+                    class_info state break try)
+                   (get_element 2 expression))
+                  class_info state break try))
+      
       ((not(number? (get_element 2 expression)))
-       (M_boolean (list (get_element 0 expression) (get_element 1 expression) (M_state_lookup (get_element 2 expression) class_info state break try)) class_info state break try));added on plane
+       (M_boolean (list
+                   (get_element 0 expression)
+                   (get_element 1 expression)
+                   (M_state_lookup
+                    (get_element 2 expression)
+                    class_info state break try))
+                  class_info state break try))
 
 
       ((eq? (car expression) '==) (M_boolean_equal (get_element 1 expression) (get_element 2 expression)))
@@ -1107,7 +1181,10 @@ Test 4:
     (cond
       ((null? var) #f)
       ((boolean? var) var)
-      ((member? var (get_element 0 state)) (M_boolean_tf_to_hashtags(M_state_lookup var class_info state break try)))
+      ((and (list? var) (eq? 'dot (car var)))
+       (M_boolean_tf_to_hashtags (M_state_instance_field_lookup_shell (get_element 2 var) (get_element 1 var) class_info state break try)))
+      ((member? var (get_element 0 state))
+       (M_boolean_tf_to_hashtags(M_state_lookup var class_info state break try)))
       ((eq? var 'true) #t)
       ((eq? var 'false) #f)
       (else (error "our version of variable not initialized"))
@@ -1211,7 +1288,10 @@ Test 4:
     (cond
       ((null? var) 'null)
       ((number? var) var)
-      ((member? var (get_element 0 state)) (M_state_lookup var class_info state break try))  
+      ((and (list? var) (eq? 'dot (car var)))
+       (M_state_instance_field_lookup_shell (get_element 2 var) (get_element 1 var) class_info state break try))
+      ((member? var (get_element 0 state))
+       (M_state_lookup var class_info state break try))  
       ((and (list? var) (boolean_operator? (car var))) (M_boolean var class_info state break try))
       ((list? var) (M_value var class_info state break try))
       ((eq? 'false var) var)
@@ -1266,7 +1346,20 @@ Test 4:
         )))
 ;(tests3)
 
-(interpret "Unit Tests/fileToParseTest4-000.txt" 'A)
+(define tests4
+  (lambda x
+      (cond
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-1.txt" 'A) 15)) (error "Test 4-1 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-2.txt" 'A) 12)) (error "Test 4-2 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-3.txt" 'A) 125)) (error "Test 4-3 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-4.txt" 'A) 36)) (error "Test 4-4 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-5.txt" 'A) 54)) (error "Test 4-5 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-6.txt" 'A) 110)) (error "Test 4-6 failed"))
+        )))
+
+(tests4)
+
+;(interpret "Unit Tests/fileToParseTest4-4.txt" 'A)
 
 
 
