@@ -261,20 +261,43 @@ Test 4:
             (get_element 4 (M_state_find_class_closure class_info class_name)))))
    (call/cc (lambda (return1) (evaluate (get_element 1 x) class_info
                                         (list
-                                         (M_state_add_fields_to_state (get_element 0 x) (M_state_add_row_to_declared_list (get_element 0 state)))
-                                         (M_state_add_fields_to_state (cons object_name actual_params) (M_state_add_row_to_value_list (get_element 1 state)))
+                                         (M_state_add_parameters_to_state (get_element 0 x) (M_state_add_row_to_declared_list (get_element 0 state)))
+                                         (M_state_add_parameters_to_state (cons object_name actual_params) (M_state_add_row_to_value_list (get_element 1 state)))
                                          '()
                                          '())
                                           class_name return1 break try))))
    ))
      
-; this adds the fields to a single sub-list of state             
-(define M_state_add_fields_to_state
+; this adds the parameters from the method call to a single sub-list of state             
+(define M_state_add_parameters_to_state
   (lambda (fields lis)
     (cond
       ((null? fields) lis)
-      (else (cons (M_state_add_fields_to_state (cdr fields) (cons (box (car fields)) (car lis))) lis))
+      (else (cons (M_state_add_parameters_to_state (cdr fields) (cons (box (car fields)) (car lis))) (cdr lis)))
       )))
+
+(define M_state_instance_field_lookup_shell
+  (lambda (field_name instance_name class_info state break try)
+    (M_state_field_lookup field_name (M_state_lookup instance_name class_info state break try))))
+  
+             
+(define M_state_field_lookup
+  (lambda (field_name instance_closure)
+    (cond
+      ((null? (instance_closure)) (error "variable not in instance closure"))
+      ((eq? field_name (car (get_element 1 instance_closure))) (car (get_element 2 instance_closure)))
+      (else (M_state_field_lookup field_name (list
+                                              (get_element 0 instance_closure)
+                                              (cdr (get_element 1 instance_closure))
+                                              (cdr (get_element 2 instance_closure)))))
+      )))
+
+;We may need to add a cond here if we need to deal with a field being an object
+(define M_state_modify_field_value
+  (lambda (field_name instance_closure newval)
+    (set-box! (M_state_field_lookup field_name instance_closure) newval)
+    ))
+      
 
 (define M_state_func_environment_shell
   (lambda (num formal_params actual_params state)
@@ -380,6 +403,8 @@ Test 4:
       ((eq? 'var (caar lis)) (M_state_declaration lis class_info state compile_type return break try))
       ((eq? '= (caar lis)) (M_state_assignment lis class_info state compile_type return break try))
       ((eq? 'if (caar lis)) (M_state_if lis class_info state compile_type return break try))
+
+      ;((and (eq? 'dot (caar lis)) 
      
       ; when it's a "while" and the condition is true
       ((eq? 'while (caar lis))
@@ -389,7 +414,7 @@ Test 4:
                  (get_element 2 state) (get_element 3 state)) compile_type return break try))
 
       ; "return with a 'funcall and no parameters
-      ((and (eq? 2 (length (get_element 1 (car lis)))) (and (and (list? (cadar lis)) (eq? 'return (caar lis))) (eq? 'funcall (caadar lis))))
+      ((and (eq? 2 (length lis)) (and (and (list? (cadar lis)) (eq? 'return (caar lis))) (eq? 'funcall (caadar lis))))
        (call/cc (lambda (return1) (M_value_call_function
                                    (get_element 2 (get_element 1 (get_element 1 (car lis)))) ;get's the func_name
                                    (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 1 (car lis)))) class_info state break try)) ;get's the class_name
@@ -407,8 +432,23 @@ Test 4:
                                                                 
       
       ; when it's return and a boolean, this gets it to be "true" or "false"
-      ((and(eq? 'return (caar lis)) (boolean? (M_state_lookup 'return class_info (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) class_info state break try) break try) (get_element 2 state) (get_element 3 state))break try)))
-       (return (list (get_element 0 state) (M_state_modify_value_list state 'return (M_state_return_helper (cadar lis) class_info state break try) break try) (get_element 2 state) (get_element 3 state))))
+      ((and(eq? 'return (caar lis)) (boolean?
+                                     (M_state_lookup 'return class_info (list (get_element 0 state)
+                                                                              (M_state_modify_value_list state 'return
+                                                                                                         (M_state_return_helper
+                                                                                                          (cadar lis)
+                                                                                                          class_info state break try)
+                                                                                                         break try)
+                                                                              (get_element 2 state)
+                                                                              (get_element 3 state))
+                                                     break try)))
+       (return (list
+                (get_element 0 state)
+                (M_state_modify_value_list state 'return
+                                           (M_state_return_helper (cadar lis) class_info state break try)
+                                           break try)
+                (get_element 2 state)
+                (get_element 3 state))))
 
       ((and (eq? 'return (caar lis)) (number? (cadar lis)))
         (return (list (get_element 0 state) (M_state_modify_value_list state 'return (cadar lis) break try) (get_element 2 state) (get_element 3 state))))
@@ -558,8 +598,8 @@ Test 4:
       ;this adds the object name to the declared_list and the instance closure to the value_list
       ((eq? 'new (car (caddar lis)))
        (evaluate (cdr lis) class_info
-                 (list (cons (box (get_element 1 (car lis))) (car (get_element 0 state)))
-                       (cons (box (M_state_instance_closure_maker (get_element 1 (get_element 2 (car lis))) class_info)) (car (get_element 1 state)))
+                 (list (M_state_add_to_declared_list (get_element 0 state) (get_element 1 (car lis)))
+                       (M_state_add_to_value_list (get_element 1 state) (M_state_instance_closure_maker (get_element 1 (get_element 2 (car lis))) class_info))
                        (get_element 2 state)
                        (get_element 3 state))
                              compile_type return break try))
@@ -579,14 +619,60 @@ Test 4:
   (lambda (lis class_info state compile_type return break try)
     (cond
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and a boolean ex: x = a && b
+      ; ....and the left side has "dot" in it
+      ((and (list? (cadar lis)) (and (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (list? (caddar lis))) (boolean_operator? (car (caddar lis)))))
+       (M_state_modify_field_value
+        (get_element 2 (cadar lis))
+        (M_state_instance_field_lookup_shell
+         (get_element 2 (cadar lis))
+         (get_element 1 (cadar lis))
+         class_info state break try)
+        (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state break try)))
+       (evaluate (cdr lis) class_info state compile_type return break try))
+
+      ;....and the left side does NOT have "dot" in it
       ((and (and (member? (cadar lis) (get_element 0 state)) (list? (caddar lis))) (boolean_operator? (car (caddar lis))))
        (evaluate (cdr lis) class_info (list (get_element 0 state)
                                  (M_state_modify_value_list state (cadar lis) (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state break try)) break try)
                                  (get_element 2 state)
                                  (get_element 3 state))
                                  compile_type return break try))
+
+      ; if it's an assignment statement and it's in the declared list, and the right side has a dot ex: this.y = this.x
+      ; ....and the left side has "dot" in it
+      ((and (and (list? caddar) (eq? 'dot (get_element 0 (caddar lis)))) (and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)))))
+       (M_state_modify_field_value
+        (get_element 2 (cadar lis))
+        (M_state_instance_field_lookup_shell
+         (get_element 2 (cadar lis))
+         (get_element 1 (cadar lis))
+         class_info state break try)
+        (M_state_instance_field_lookup_shell (get_element 2 (caddar lis)) (get_element 1 (caddar lis)) class_info state break try))
+       (evaluate (cdr lis) class_info state compile_type return break try))
+      
+      ;....and the left side does NOT have "dot" in it ex: y = this.x
+       ((and (and (list? caddar) (eq? 'dot (get_element 0 (caddar lis)))) (and (member? (cadar lis) (get_element 0 state)) (member? (caddar lis) (get_element 0 state))))
+       (evaluate (cdr lis) class_info (list (get_element 0 state)
+                                 (M_state_modify_value_list state (cadar lis)
+                                                            (M_state_instance_field_lookup_shell (get_element 2 (caddar lis)) (get_element 1 (caddar lis))
+                                                                                                 class_info state break try) break try)
+                                 (get_element 2 state)
+                                 (get_element 3 state))
+                                 compile_type return break try))
       
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a list and not a boolean ex: x = 5+7
+      ; ....and the left side has "dot" in it
+      ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (list? (caddar lis))))
+       (M_state_modify_field_value
+        (get_element 2 (cadar lis))
+        (M_state_instance_field_lookup_shell
+         (get_element 2 (cadar lis))
+         (get_element 1 (cadar lis))
+         class_info state break try)
+        (M_value (caddar lis) class_info state break try))
+       (evaluate (cdr lis) class_info state compile_type return break try))
+      
+      ;....and the left side does NOT have "dot" in it
       ((and (member? (cadar lis) (get_element 0 state)) (list? (caddar lis)))
        (evaluate (cdr lis) class_info (list (get_element 0 state)
                  (M_state_modify_value_list state (cadar lis) (M_value (caddar lis) class_info state break try) break try)
@@ -595,20 +681,46 @@ Test 4:
                  compile_type return break try))
       
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a number ex: x = 5
+      ; ....and the left side has "dot" in it
+      ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (number? (caddar lis))))
+       (M_state_modify_field_value
+        (get_element 2 (cadar lis))
+        (M_state_instance_field_lookup_shell
+         (get_element 2 (cadar lis))
+         (get_element 1 (cadar lis))
+         class_info state break try)
+        (caddar lis))
+       (evaluate (cdr lis) class_info state compile_type return break try))
+      
+      ;....and the left side does NOT have "dot" in it
       ((and (member? (cadar lis) (get_element 0 state)) (number? (caddar lis)))
        (evaluate (cdr lis) class_info (list (get_element 0 state)
                                  (M_state_modify_value_list state (cadar lis) (caddar lis) break try)
                                  (get_element 2 state)
                                  (get_element 3 state))
                                  compile_type return break try))
+
       
       ; if it's an assignment statement and it's in the declared list, assuming the second value is a variable ex: x = y
-      ((and (member? (cadar lis) (get_element 0 state)) (member? (caddar lis) (get_element 0 state)))
+      ; ....and the left side has "dot" in it
+      ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (member? (caddar lis) (get_element 0 state))))
+       (M_state_modify_field_value
+        (get_element 2 (cadar lis))
+        (M_state_instance_field_lookup_shell
+         (get_element 2 (cadar lis))
+         (get_element 1 (cadar lis))
+         class_info state break try)
+        (M_state_lookup (caddar lis) class_info state break try))
+       (evaluate (cdr lis) class_info state compile_type return break try))
+      
+      ;....and the left side does NOT have "dot" in it
+       ((and (member? (cadar lis) (get_element 0 state)) (member? (caddar lis) (get_element 0 state)))
        (evaluate (cdr lis) class_info (list (get_element 0 state)
                                  (M_state_modify_value_list state (cadar lis) (M_state_lookup (caddar lis) class_info state break try) break try)
                                  (get_element 2 state)
                                  (get_element 3 state))
                                  compile_type return break try))
+      
       ; if it's an assignment statement and gets to this line, it's not in the declared list and should fail. 
       (else (error "our version of variable not initialized"))
       )))
@@ -728,10 +840,8 @@ Test 4:
 
 (define M_state_add_to_value_list
   (lambda (value_list val)
-    (cond
-      ((list? val) (error "val is a list for some reason"))
-      (else (cons (cons (box val) (car value_list)) (cdr value_list)))
-       )))
+    (cons (cons (box val) (car value_list)) (cdr value_list))
+       ))
 
 ;if the variable is already in the declared-list, then this changes the value in the value list.
 (define M_state_modify_value_list
@@ -811,7 +921,18 @@ Test 4:
       ((null? expression) '())
       ((number? expression) expression)
       ((number? (car expression)) (car expression))
-      ((member? (get_element 0 expression) (get_element 0 state)) (M_state_lookup (get_element 0 expression) class_info state break try))
+
+      ; if the expression is this.x
+      ((and (list? (get_element 0 expression)) (eq? 'dot (get_element 0 (get_element 0 expression))))
+       (M_state_instance_field_lookup_shell
+        (get_element 2 (get_element 0 expression))
+        (get_element 1 (get_element 0 expression))
+        class_info state break try))
+       
+      
+      ((member? (get_element 0 expression) (get_element 0 state))
+       (M_state_lookup (get_element 0 expression) class_info state break try))
+      
       ((and (and (eq? (length expression) 2) (eq? (car expression) '-))) 
        (* -1 (M_value (get_element 1 expression) class_info state break try)))
        
@@ -889,6 +1010,24 @@ Test 4:
                                                                                      (get_element 1 (get_element 1 (get_element 2 expression)))
                                                                                      (list (cddr (get_element 2 expression)))
                                                                                      class_info state return1 break try))) break try)) class_info state break try))
+      ; the left side of the equation is a field (aka as "dot")
+      ((and (list? (get_element 1 expression)) (eq? 'dot (get_element 0 (get_element 1 expression))))
+       (M_value (list (get_element 0 expression)
+                      (M_state_instance_field_lookup_shell
+                       (get_element 2 (get_element 1 expression))
+                       (get_element 1 (get_element 1 expression))
+                       class_info state break try)
+                         (get_element 2 expression)) class_info state break try))
+
+      ; the right side of the equation is a field (aka as "dot")
+      ((and (list? (get_element 2 expression)) (eq? 'dot (get_element 0 (get_element 2 expression))))
+       (M_value (list (get_element 0 expression)
+                              (get_element 1 expression)
+                              (M_state_instance_field_lookup_shell
+                               (get_element 2 (get_element 2 expression))
+                               (get_element 1 (get_element 2 expression))
+                               class_info state break try))
+                class_info state break try))
       
       ((list? (get_element 1 expression))
        (M_value (list (get_element 0 expression)
@@ -898,10 +1037,12 @@ Test 4:
        (M_value (list (get_element 0 expression)
                               (get_element 1 expression)  (M_value (get_element 2 expression) class_info state break try)) class_info state break try))
 
+      ; the left side of the equation is a variable and NOT a "dot"
       ((member? (get_element 1 expression) (get_element 0 state))
        (M_value (list (get_element 0 expression)
                              (M_state_lookup (get_element 1 expression) class_info state break try) (get_element 2 expression)) class_info state break try))
 
+      ; the right side of the equation is a variable and NOT a "dot"
       ((member? (get_element 2 expression) (get_element 0 state))
        (M_value (list (get_element 0 expression)
                               (get_element 1 expression)  (M_state_lookup (get_element 2 expression) class_info state break try)) class_info state break try))
