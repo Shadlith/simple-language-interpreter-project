@@ -216,6 +216,34 @@ Test 4:
       (else (cons (box (car lis)) (box_elements (cdr lis))))
       )))
 
+(define alias_finder
+  (lambda (object_name original_state state)
+    (cond
+      ((list? object_name) object_name)
+      ((and (list? (car (get_element 0 state))) (member? object_name (car (get_element 0 state))))
+       (alias_finder object_name original_state (list
+                                                 (car (get_element 0 state))
+                                                 (car (get_element 1 state))
+                                                 (get_element 2 state)
+                                                 (get_element 3 state))))
+      ((list? (car (get_element 0 state)))
+       (alias_finder object_name original_state (list
+                                                 (cdr (get_element 0 state))
+                                                 (cdr (get_element 1 state))
+                                                 (get_element 2 state)
+                                                 (get_element 3 state))))
+                                                 
+      ((and (eq? object_name (unbox (car (get_element 0 state)))) (list? (unbox (car (get_element 1 state))))) object_name)
+      ((eq? object_name (unbox (car (get_element 0 state))))
+       (alias_finder (unbox (car (get_element 1 state))) original_state original_state))
+      (else (alias_finder object_name original_state (list
+                                                      (cdr (get_element 0 state))
+                                                      (cdr (get_element 1 state))
+                                                       (get_element 2 state)
+                                                       (get_element 3 state))))
+      )))
+                                                     
+
 
 ;We need to see if we need this....we should just be able to pull from the value list....but we need to figure out when we need that info.
 #|
@@ -270,11 +298,49 @@ Test 4:
    (call/cc (lambda (return1) (evaluate (get_element 1 x) class_info
                                         (list
                                          (M_state_add_parameters_to_state (get_element 0 x) (M_state_add_row_to_declared_list (get_element 0 state)))
-                                         (M_state_add_parameters_to_state (cons object_name actual_params) (M_state_add_row_to_value_list (get_element 1 state)))
+                                         (M_state_add_parameters_to_state (cons (alias_finder object_name state state) (parameter_translator actual_params class_info state break try)) (M_state_add_row_to_value_list (get_element 1 state)))
                                          '()
                                          '())
                                           class_name return1 break try))))
    ))
+
+(define parameter_translator
+  (lambda (actual_params class_info state break try)
+    (cond
+      ((null? actual_params) '())
+      ((or (boolean? (car actual_params)) (number? (car actual_params))) (cons (car actual_params) (parameter_translator (cdr actual_params) class_info state break try)))
+      ; math expression
+      ((and (list? (car actual_params)) (operator? (car actual_params))) (cons (M_value (car actual_params) class_info state break try) (parameter_translator (cdr actual_params) class_info state break try)))
+      ; boolean expression 
+      ((and (list? (car actual_params)) (boolean_operator? (car actual_params)))
+       (cons (M_boolean (car actual_params) class_info state break try) (parameter_translator (cdr actual_params) class_info state break try)))
+      ; method call without actual params
+      ((and (and (list? (car actual_params)) (eq? 2 (length (car actual_params)))) (eq? 'funcall (get_element 0 (car actual_params))))
+       (cons (call/cc (lambda (return) (M_value_call_function
+                                  (get_element 2 (get_element 1 (car actual_params)))
+                                  (M_state_lookup (alias_finder (get_element 1 (get_element 1 (car actual_params))) state state) class_info state break try)
+                                  (get_element 1 (get_element 1 (car actual_params)))
+                                  '()
+                                  class_info state return break try))) (parameter_translator (cdr actual_params) class_info state break try)))
+      ; method call with actual params
+      ((and (list? (car actual_params)) (and (eq? 'funcall (get_element 0 (car actual_params)))))
+       (cons (call/cc (lambda (return) (M_value_call_function
+                                  (get_element 2 (get_element 1 (car actual_params)))
+                                  (M_state_lookup (alias_finder (get_element 1 (get_element 1 (car actual_params))) state state) class_info state break try)
+                                  (get_element 1 (get_element 1 (car actual_params)))
+                                  (cddr (car actual_params))
+                                  class_info state return break try))) (parameter_translator (cdr actual_params) class_info state break try)))
+
+      ; field from an object
+      ((and (list? (car actual_params)) (eq? 'dot (get_element 0 (car actual_params))))
+       (cons (M_state_instance_field_lookup_shell
+        (get_element 2 (car actual_params))
+        (get_element 1 (car actual_params))
+        class_info state break try) (parameter_translator (cdr actual_params) class_info state break try)))
+ 
+      ; variable
+      (else (cons (M_state_lookup (car actual_params) class_info state break try) (parameter_translator (cdr actual_params) class_info state break try)))
+      )))
      
 ; this adds the parameters from the method call to a single sub-list of state             
 (define M_state_add_parameters_to_state
@@ -287,9 +353,9 @@ Test 4:
 (define M_state_instance_field_lookup_shell
   (lambda (field_name instance_name class_info state break try)
     (cond
-      ((list? (M_state_lookup instance_name class_info state break try))
-       (M_state_field_lookup field_name (M_state_lookup instance_name class_info state break try)))
-      (else (M_state_instance_field_lookup_shell field_name (M_state_lookup instance_name class_info state break try) class_info state break try))
+      ((list? (M_state_lookup (alias_finder instance_name state state) class_info state break try))
+       (M_state_field_lookup field_name (M_state_lookup (alias_finder instance_name state state) class_info state break try)))
+      (else (M_state_instance_field_lookup_shell field_name (M_state_lookup (alias_finder instance_name state state) class_info state break try) class_info state break try))
        )))
   
              
@@ -397,7 +463,7 @@ Test 4:
                                                                                                                 (get_element 1 (get_element 1 (call/cc (lambda (return1)
                                                                                                                                           (M_value_call_function
                                                                                                                                            (get_element 2 (get_element 1 (car lis)))
-                                                                                                                                           (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (car lis))) class_info state break try))
+                                                                                                                                           (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (car lis))) state state) class_info state break try))
                                                                                                                                            (get_element 1 (get_element 1 (car lis)))
                                                                                                                                            '()
                                                                                                                                            class_info state return1 break try)))))
@@ -413,7 +479,7 @@ Test 4:
                                                                                                                 (get_element 1 (get_element 1 (call/cc (lambda (return1)
                                                                                                                                           (M_value_call_function
                                                                                                                                            (get_element 2 (get_element 1 (car lis)))
-                                                                                                                                           (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (car lis))) class_info state break try))
+                                                                                                                                           (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (car lis))) state state) class_info state break try))
                                                                                                                                            (get_element 1 (get_element 1 (car lis)))
                                                                                                                                            (cddr (car lis)) ; we THINK this gets the parameter list, neeed cddr b/c it may be a list of parameters
                                                                                                                                            class_info state return1 break try)))))
@@ -440,7 +506,7 @@ Test 4:
       ((and (eq? 2 (length lis)) (and (and (list? (cadar lis)) (eq? 'return (caar lis))) (eq? 'funcall (caadar lis))))
        (call/cc (lambda (return1) (M_value_call_function
                                    (get_element 2 (get_element 1 (get_element 1 (car lis)))) ;get's the func_name
-                                   (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 1 (car lis)))) class_info state break try)) ;get's the class_name
+                                   (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 1 (car lis)))) state state) class_info state break try)) ;get's the class_name
                                    (get_element 1 (get_element 1 (get_element 1 (car lis))))
                                    '() class_info state return1 break try))))
       
@@ -448,7 +514,7 @@ Test 4:
       ((and (and (list? (cadar lis)) (eq? 'return (caar lis))) (eq? 'funcall (caadar lis)))
        (call/cc (lambda (return1) (M_value_call_function
                                    (get_element 2 (get_element 1 (get_element 1 (car lis)))) ;get's the func_name
-                                   (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 1 (car lis)))) class_info state break try)) ;get's the class_name
+                                   (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 1 (car lis)))) state state) class_info state break try)) ;get's the class_name
                                    (get_element 1 (get_element 1 (get_element 1 (car lis))))
                                    (cddr (get_element 1 (car lis))) ;we THINK this gets the parameter list, have to do cddr in case it's a list of parameters
                                    class_info state return1 break try))))
@@ -646,7 +712,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (list? (caddar lis))) (boolean_operator? (car (caddar lis)))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_lookup (get_element 1 (cadar lis))
+        (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state break try)
         (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state break try)))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -664,7 +730,7 @@ Test 4:
       ((and (and (list? caddar) (eq? 'dot (get_element 0 (caddar lis)))) (and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_lookup (get_element 1 (cadar lis))
+        (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state break try)
         (M_state_instance_field_lookup_shell
          (get_element 2 (caddar lis))
@@ -687,7 +753,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (list? (caddar lis))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_lookup (get_element 1 (cadar lis))
+        (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state break try)
         (M_value (caddar lis) class_info state break try))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -705,7 +771,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (number? (caddar lis))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_lookup (get_element 1 (cadar lis))
+        (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state break try)
         (caddar lis))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -724,7 +790,7 @@ Test 4:
       ((and (list? (cadar lis)) (and (member? (get_element 1 (cadar lis)) (get_element 0 state)) (member? (caddar lis) (get_element 0 state))))
        (M_state_modify_field_value
         (get_element 2 (cadar lis))
-        (M_state_lookup (get_element 1 (cadar lis))
+        (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state break try)
         (M_state_lookup (caddar lis) class_info state break try))
        (evaluate (cdr lis) class_info state compile_type return break try))
@@ -891,6 +957,8 @@ Test 4:
   (lambda (var class_info state break try)
     (cond
       ((null? (get_element 0 state)) (error "variable not found"))
+      ; if the var is a list, that means it has "new" in it. If so, return the closure (that we make right now)
+      ((list? var) (M_state_instance_closure_maker (get_element 1 var) class_info))
       ((eq? 'this var) (M_state_lookup_this class_info state state break try))
       ((and (and (list? (car (get_element 0 state))) (member? var (car (get_element 0 state)))) (not(null? (car (get_element 0 state)))))
        (M_state_lookup var class_info (list (car (get_element 0 state))
@@ -909,6 +977,7 @@ Test 4:
                                       (get_element 2 state)
                                       (get_element 3 state)) break try))
       )))
+
 
 (define M_state_lookup_this
   (lambda (class_info original_state state break try)
@@ -995,7 +1064,7 @@ Test 4:
       ((and (eq? 2 (length expression)) (eq? 'funcall (get_element 0 expression)))
        (M_state_lookup 'return class_info (call/cc (lambda (return1) (M_value_call_function
                                                                       (get_element 2 (get_element 1 expression))
-                                                                      (get_element 0 (M_state_lookup (get_element 1 (get_element 1 expression)) class_info state break try))
+                                                                      (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 expression)) state state) class_info state break try))
                                                                       (get_element 1 (get_element 1 expression))
                                                                       '()
                                                                       class_info state return1 break try))) break try))
@@ -1004,7 +1073,7 @@ Test 4:
        (M_value (list (get_element 0 expression)
                       (M_state_lookup 'return class_info (call/cc (lambda (return1) (M_value_call_function
                                                                                      (get_element 2 (get_element 1 (get_element 1 expression)))
-                                                                                     (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 1 expression))) class_info state break try))
+                                                                                     (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 1 expression))) state state) class_info state break try))
                                                                                      (get_element 1 (get_element 1 (get_element 1 expression)))
                                                                                      '()
                                                                                      class_info state return1 break try))) break try)
@@ -1015,7 +1084,7 @@ Test 4:
                       (get_element 1 expression)
                       (M_state_lookup 'return class_info (call/cc (lambda (return1) (M_value_call_function
                                                                                      (get_element 2(get_element 1 (get_element 2 expression)))
-                                                                                     (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 2 expression))) class_info state break try))
+                                                                                     (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 2 expression))) state state) class_info state break try))
                                                                                      (get_element 1 (get_element 1 (get_element 2 expression)))
                                                                                      '()
                                                                                      class_info state return1 break try))) break try)) class_info state break try))
@@ -1024,7 +1093,7 @@ Test 4:
       ((eq? 'funcall (get_element 0 expression))
        (M_state_lookup 'return class_info (call/cc (lambda (return1) (M_value_call_function
                                                                       (get_element 2 (get_element 1 expression))
-                                                                      (get_element 0 (M_state_lookup (get_element 1 (get_element 1 expression)) class_info state break try))
+                                                                      (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 expression)) state state) class_info state break try))
                                                                       (get_element 1 (get_element 1 expression))
                                                                       (cddr expression) 
                                                                       class_info state return1 break try))) break try))
@@ -1033,7 +1102,7 @@ Test 4:
        (M_value (list (get_element 0 expression)
                       (M_state_lookup 'return class_info (call/cc (lambda (return1) (M_value_call_function
                                                                                      (get_element 2 (get_element 1 (get_element 1 expression)))
-                                                                                     (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 1 expression))) class_info state break try))
+                                                                                     (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 1 expression))) state state) class_info state break try))
                                                                                      (get_element 1 (get_element 1 (get_element 1 expression)))
                                                                                      (list (cddr (get_element 1 expression)))
                                                                                      class_info state return1 break try))) break try)
@@ -1044,7 +1113,7 @@ Test 4:
                       (get_element 1 expression)
                       (M_state_lookup 'return class_info (call/cc (lambda (return1) (M_value_call_function
                                                                                      (get_element 2(get_element 1 (get_element 2 expression)))
-                                                                                     (get_element 0 (M_state_lookup (get_element 1 (get_element 1 (get_element 2 expression))) class_info state break try))
+                                                                                     (get_element 0 (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 2 expression))) state state) class_info state break try))
                                                                                      (get_element 1 (get_element 1 (get_element 2 expression)))
                                                                                      (list (cddr (get_element 2 expression)))
                                                                                      class_info state return1 break try))) break try)) class_info state break try))
@@ -1359,7 +1428,7 @@ Test 4:
 
 (tests4)
 
-;(interpret "Unit Tests/fileToParseTest4-4.txt" 'A)
+;(interpret "Unit Tests/fileToParseTest4-6.txt" 'A)
 
 
 
