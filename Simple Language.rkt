@@ -351,7 +351,7 @@ Test 4:
                                          '()
                                          '())
                                           class_name
-                                          (M_state_lookup (alias_finder object_name state state) class_info state instance_closure break try)
+                                          (M_state_lookup (alias_finder object_name state state) class_info state instance_closure break try) 
                                           return1 break try))))
    ))
 
@@ -596,7 +596,8 @@ Test 4:
                                    (get_element 1 (get_element 1 (get_element 1 (car lis))))
                                    (cddr (get_element 1 (car lis))) ;we THINK this gets the parameter list, have to do cddr in case it's a list of parameters
                                    class_info state
-                                   (M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 1 (car lis)))) state state) class_info state instance_closure break try)
+                                   instance_closure
+                                   ;(M_state_lookup (alias_finder (get_element 1 (get_element 1 (get_element 1 (car lis)))) state state) class_info state instance_closure break try)
                   return1 break try))))
                                                                 
       
@@ -1510,7 +1511,7 @@ Test 4:
         ((not (eq? (interpret "Unit Tests/fileToParseTest4-4.txt" 'A) 36)) (error "Test 4-4 failed"))
         ((not (eq? (interpret "Unit Tests/fileToParseTest4-5.txt" 'A) 54)) (error "Test 4-5 failed"))
         ((not (eq? (interpret "Unit Tests/fileToParseTest4-6.txt" 'A) 110)) (error "Test 4-6 failed"))
-        ;((not (eq? (interpret "Unit Tests/fileToParseTest4-7.txt" 'C) 26)) (error "Test 4-7 failed"))
+        ((not (eq? (interpret "Unit Tests/fileToParseTest4-7.txt" 'C) 26)) (error "Test 4-7 failed"))
         ;((not (eq? (interpret "Unit Tests/fileToParseTest4-8.txt" 'Square) 117)) (error "Test 4-8 failed"))
         ;((not (eq? (interpret "Unit Tests/fileToParseTest4-9.txt" 'Square) 32)) (error "Test 4-9 failed"))
         ;((not (eq? (interpret "Unit Tests/fileToParseTest4-10.txt" 'List) 15)) (error "Test 4-10 failed"))
@@ -1520,9 +1521,9 @@ Test 4:
         (display "all tests passed")
         )))
 
-(tests4)
+;(tests4)
 
-;(interpret "Unit Tests/fileToParseTest4-7.txt" 'C)
+(interpret "Unit Tests/fileToParseTest4-7.txt" 'C)
 ;(interpret "Unit Tests/fileToParseTest4-9.txt" 'Square)
 
 
