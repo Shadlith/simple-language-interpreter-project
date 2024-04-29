@@ -96,7 +96,7 @@ Test 4:
 (define M_state_find_main
   (lambda (class_closure)
     (cond
-      ((eq? 'main (caar (get_element 3 class_closure))) (get_element 1 (caar (get_element 4 class_closure))))
+      ((eq? 'main (car (get_element 3 class_closure))) (get_element 1 (car (get_element 4 class_closure))))
       (else (M_state_find_main (list (get_element 0 class_closure)
                                    (get_element 1 class_closure)
                                    (get_element 2 class_closure)
@@ -128,10 +128,7 @@ Test 4:
 
 
   
-;(define M_state_run_method
-  ;(lambda (instance_class method_name class_info)
-   ; ()))
-                                                             
+                                                           
     
 ; For Part 4, the class closure contains:
 ;     super class
@@ -151,10 +148,10 @@ Test 4:
        (let ((super_class_closure (M_state_get_class_closure_info (get_element 1 (get_element 2 lis)) class_info )))
        (M_state_class_closure_maker (get_element 3 lis) class_name class_info (list
                                                 (get_element 1 (get_element 2 lis))
-                                                (M_state_add_row_to_list (get_element 1 super_class_closure))
-                                                (M_state_add_row_to_list (get_element 2 super_class_closure))
-                                                (M_state_add_row_to_list (get_element 3 super_class_closure))
-                                                (M_state_add_row_to_list (get_element 4 super_class_closure))))))
+                                                (get_element 1 super_class_closure)
+                                                (get_element 2 super_class_closure)
+                                                (get_element 3 super_class_closure)
+                                                (get_element 4 super_class_closure)))))
       ; if this class does NOT extend another class
       ((eq? 'class (car lis)) 
        (M_state_class_closure_maker (get_element 3 lis) class_name class_info output))
@@ -163,8 +160,8 @@ Test 4:
       ((eq? 'var (caar lis))
        (M_state_class_closure_maker (cdr lis) class_name class_info (list
                                                (get_element 0 output)
-                                               (cons (cons (get_element 1 (car lis)) (car (get_element 1 output))) (cdr (get_element 1 output)))
-                                               (cons (cons (get_element 2 (car lis)) (car (get_element 2 output))) (cdr (get_element 2 output)))
+                                               (cons (get_element 1 (car lis)) (get_element 1 output))
+                                               (cons (get_element 2 (car lis)) (get_element 2 output))
                                                (get_element 3 output)
                                                (get_element 4 output))))
 
@@ -174,11 +171,11 @@ Test 4:
                                                (get_element 0 output)
                                                (get_element 1 output)
                                                (get_element 2 output)
-                                               (cons (cons (get_element 1 (car lis)) (car (get_element 3 output))) (cdr (get_element 3 output)))
-                                               (cons (cons
+                                               (cons (get_element 1 (car lis)) (get_element 3 output))
+                                               (cons
                                                       (list (cons 'this (get_element 2 (car lis))) (get_element 3 (car lis)) 1 class_name) ;<- 1 is hard-coded b/c we think that we'll always have to pull from layer 1 since we don't have to deal with nested functions
-                                                      (car (get_element 4 output))) 
-                                                      (cdr (get_element 4 output))) 
+                                                      (get_element 4 output)) 
+                                                      
                                                 )))
       
       ((eq? 'static-function (caar lis))
@@ -186,44 +183,13 @@ Test 4:
                                                (get_element 0 output)
                                                (get_element 1 output)
                                                (get_element 2 output)
-                                               (cons (cons (get_element 1 (car lis)) (car (get_element 3 output))) (cdr (get_element 3 output)))
-                                               (cons (cons
+                                               (cons (get_element 1 (car lis)) (get_element 3 output))
+                                               (cons
                                                       (list (get_element 2 (car lis)) (get_element 3 (car lis)) 1 class_name)
-                                                      (car (get_element 4 output)))
-                                                     (cdr (get_element 4 output)))
-                                               )))
+                                                      (get_element 4 output)))
+                                               ))
       
       )))
-
-(define M_state_class_closure_maker_adding_polymorphism_shell
-  (lambda (class_info)
-    (cond
-      ; iterating through the class_info, if the name list is empty, we're done. 
-      ((null? (get_element 0 class_info)) class_info)
-      (else
-       (list (get_element 0 class_info)
-             (cons (M_state_class_closure_maker_adding_polymorphism (car (get_element 0 class_info)) class_info)
-                   (cdr (M_state_class_closure_maker_adding_polymorphism_shell
-                         (list (cdr (get_element 0 class_info))
-                               (cdr (get_element 1 class_info))))))))
-      )))
-
-;since we are assuming that superclasses are made, completely, before subclasses, this should only grab one level up. 
-(define M_state_class_closure_maker_adding_polymorphism
-  (lambda (class_name class_info)
-    (cond
-      ;if the closure we're looking at doesn't have a superclass, we're done for that class. 
-      ((null? (get_element 0 (car (get_element 1 class_info)))) class_info)
-      ;this class has a superclass
-      (else (let ((closure (M_state_get_class_closure_info class_name class_info))
-                  (super_closure (M_state_get_class_closure_info (get_element 0 (get_element 0 (get_element 1 class_info))) class_info)))
-              (list (get_element 0 (get_element 0 closure))
-                    (cons (get_element 1 closure) (get_element 1 super_closure)) ; we might need to make this one continuous list instead of 2 next to each other
-                    (cons (get_element 2 closure) (get_element 2 super_closure))
-                    (cons (get_element 3 closure) (get_element 3 super_closure))
-                    (cons (get_element 4 closure) (get_element 4 super_closure)))))
-      )))
-
 
                     
 (define M_state_get_class_closure_info
@@ -245,8 +211,16 @@ Test 4:
 (define M_state_instance_closure_maker
   (lambda (class_name class_info)
     (let ((x (M_state_get_class_closure_info class_name class_info)))
-      (list class_name (box_elements (get_element 1 x)) (box_elements (get_element 2 x))))
+      (list class_name (reverse* (box_elements (get_element 2 x)))))
       ))
+
+(define reverse*
+  (lambda (lis)
+    (cond
+      ((null? lis) lis)
+      ((list? (car lis)) (append (reverse* (cdr lis)) (list (reverse*(car lis)))))
+      (else (append (reverse* (cdr lis)) (list (car lis))))
+      )))
 
 (define box_elements
   (lambda (lis)
@@ -401,51 +375,47 @@ Test 4:
       (else (cons (cons (box (car fields)) (car (M_state_add_parameters_to_state (cdr fields) lis))) (cdr (M_state_add_parameters_to_state (cdr fields) lis))))
       )))
 
+; this should find the index that the field is at in the class closure field name list.
+; Then, we get the remainder in the list and set that to index.
+; Then, we lookup that index in the instance field's closure to output the correct value for the field. 
 (define M_state_instance_field_lookup_shell
   (lambda (field_name instance_name class_info state instance_closure break try)
     (cond
-      ((list? (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try))
-       (M_state_field_lookup field_name (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try)))
-      (else (M_state_instance_field_lookup_shell field_name (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try) class_info state instance_closure break try))
+      ; if the field name is not super, look it in the state to get its class
+      ((not (eq? 'super instance_name))
+       (unbox (get_element (field_index_finder field_name (get_element 1 (M_state_get_class_closure_info
+                                                                   (get_element 0
+                                                                   (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try)) class_info)))
+                    (get_element 1 (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try))))) 
+      
        )))
-  
+
+(define field_index_finder
+  (lambda (field_name class_closure_field_names_list)
+    (cond
+      ((null? class_closure_field_names_list) (error "field name not found in class closure"))
+      ((eq? field_name (car class_closure_field_names_list)) (length (cdr class_closure_field_names_list))) ;might need to change this to without the cdr
+      (else (field_index_finder field_name (cdr class_closure_field_names_list)))
+      )))
+
+(define M_state_instance_field_lookup_shell_boxed
+  (lambda (field_name instance_name class_info state instance_closure break try)
+    (cond
+      ; if the field name is not super, look it in the state to get its class
+      ((not (eq? 'super instance_name))
+       (get_element (field_index_finder field_name (get_element 1 (M_state_get_class_closure_info
+                                                                   (get_element 0
+                                                                   (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try)) class_info)))
+                    (get_element 1 (M_state_lookup (alias_finder instance_name state state) class_info state instance_closure break try))))
+      
+       )))
+
+
              
-(define M_state_field_lookup
-  (lambda (field_name instance_closure)
-    (cond
-      ((null? instance_closure) (error "variable not in instance closure"))
-      ((and (list? (car (get_element 1 instance_closure))) (member? field_name (car (get_element 1 instance_closure))))
-       (M_state_field_lookup field_name (list
-                                         (get_element 0 instance_closure)
-                                         (car (get_element 1 instance_closure))
-                                         (car (get_element 2 instance_closure))))) 
-      ((eq? field_name (unbox (car (get_element 1 instance_closure)))) (unbox (car (get_element 2 instance_closure))))
-      (else (M_state_field_lookup field_name (list
-                                              (get_element 0 instance_closure)
-                                              (cdr (get_element 1 instance_closure))
-                                              (cdr (get_element 2 instance_closure)))))
-      )))
-
-(define M_state_field_lookup_boxed
-  (lambda (field_name instance_closure)
-    (cond
-      ((null? instance_closure) (error "variable not in instance closure"))
-      ((and (list? (car (get_element 1 instance_closure))) (member? field_name (car (get_element 1 instance_closure))))
-       (M_state_field_lookup_boxed field_name (list
-                                         (get_element 0 instance_closure)
-                                         (car (get_element 1 instance_closure))
-                                         (car (get_element 2 instance_closure)))))
-      ((eq? field_name (unbox (car (get_element 1 instance_closure)))) (car (get_element 2 instance_closure)))
-      (else (M_state_field_lookup field_name (list
-                                              (get_element 0 instance_closure)
-                                              (cdr (get_element 1 instance_closure))
-                                              (cdr (get_element 2 instance_closure)))))
-      )))
-
 ;We may need to add a cond here if we need to deal with a field being an object
 (define M_state_modify_field_value
-  (lambda (field_name instance_closure newval)
-    (set-box! (M_state_field_lookup_boxed field_name instance_closure) newval)
+  (lambda (field_name instance_closure newval instance_name class_info state break try)
+    (set-box! (M_state_instance_field_lookup_shell_boxed field_name instance_name class_info state instance_closure break try) newval)
     ))
       
 
@@ -795,7 +765,7 @@ Test 4:
         (get_element 2 (cadar lis))
         (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state instance_closure break try)
-        (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state instance_closure break try)))
+        (M_boolean_tf_to_truefalse (M_boolean (caddar lis) state instance_closure break try)) (get_element 1 (get_element 1 (car lis)))  class_info state break try)
        (evaluate (cdr lis) class_info state compile_type instance_closure return break try))
 
       ;....and the left side does NOT have "dot" in it
@@ -816,7 +786,7 @@ Test 4:
         (M_state_instance_field_lookup_shell
          (get_element 2 (caddar lis))
          (get_element 1 (caddar lis))
-         class_info state instance_closure break try))
+         class_info state instance_closure break try) (get_element 1 (get_element 1 (car lis))) class_info state break try)
        (evaluate (cdr lis) class_info state compile_type instance_closure return break try))
       
       ;....and the left side does NOT have "dot" in it ex: y = this.x
@@ -836,7 +806,7 @@ Test 4:
         (get_element 2 (cadar lis))
         (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state instance_closure break try)
-        (M_value (caddar lis) class_info state instance_closure break try))
+        (M_value (caddar lis) class_info state instance_closure break try) (get_element 1 (get_element 1 (car lis))) class_info state break try)
        (evaluate (cdr lis) class_info state compile_type instance_closure return break try))
       
       ;....and the left side does NOT have "dot" in it
@@ -854,7 +824,7 @@ Test 4:
         (get_element 2 (cadar lis))
         (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state instance_closure break try)
-        (caddar lis))
+        (caddar lis) (get_element 1 (get_element 1 (car lis))) class_info state break try)
        (evaluate (cdr lis) class_info state compile_type instance_closure return break try))
       
       ;....and the left side does NOT have "dot" in it
@@ -873,7 +843,7 @@ Test 4:
         (get_element 2 (cadar lis))
         (M_state_lookup (alias_finder (get_element 1 (cadar lis)) state state)
          class_info state instance_closure break try)
-        (M_state_lookup (caddar lis) class_info state instance_closure break try))
+        (M_state_lookup (caddar lis) class_info state instance_closure break try) (get_element 1 (get_element 1 (car lis))) class_info state break try)
        (evaluate (cdr lis) class_info state compile_type instance_closure return break try))
       
       ;....and the left side does NOT have "dot" in it
@@ -1064,49 +1034,6 @@ Test 4:
                                       (get_element 3 state)) instance_closure break try))
       )))
 
-
-(define M_state_lookup_this
-  (lambda (class_info original_state state instance_closure break try)
-    (cond
-      ((null? (get_element 0 state)) (error "'this' doesn't exist"))
-      ((and (and (list? (car (get_element 0 state))) (member? 'this (car (get_element 0 state)))) (not(null? (car (get_element 0 state)))))
-       (M_state_lookup_this class_info original_state (list (car (get_element 0 state))
-                                 (car (get_element 1 state))
-                                 (get_element 2 state)
-                                 (get_element 3 state)) instance_closure break try))
-      
-      ((list? (car (get_element 0 state)))
-       (M_state_lookup_this class_info original_state (list (cdr (get_element 0 state))
-                                                                     (cdr (get_element 1 state))
-                                                                     (get_element 2 state)
-                                                                     (get_element 3 state)) instance_closure break try))
-      
-      ((eq? 'this (unbox (car (get_element 0 state)))) (M_state_lookup (unbox (car (get_element 1 state))) class_info original_state instance_closure break try))
-      (else (M_state_lookup_this class_info original_state (cdr state) instance_closure break try))
-      )))
-      
-
-(define M_state_func_lookup
-  (lambda (var state)
-    (cond
-      ((null? (get_element 2 state)) (error "function not found"))
-      ((and (and (list? (car (get_element 2 state))) (member? var (car (get_element 2 state)))) (not(null? (car (get_element 2 state)))))
-       (M_state_func_lookup var (list (get_element 0 state)
-                                 (get_element 1 state)
-                                 (car (get_element 2 state))
-                                 (car (get_element 3 state)))))
-      
-      ((list? (car (get_element 2 state))) (M_state_func_lookup var (list (get_element 0 state)
-                                                                     (get_element 1 state)
-                                                                     (cdr (get_element 2 state))
-                                                                     (cdr (get_element 3 state)))))
-      
-      ((eq? var (unbox (car (get_element 2 state)))) (car (get_element 3 state)))
-      (else (M_state_func_lookup var (list (get_element 0 state)
-                                      (get_element 1 state)
-                                      (cdr (get_element 2 state))
-                                      (cdr (get_element 3 state)))))
-      )))
 
 (define M_value
   (lambda (expression class_info state instance_closure break try)
@@ -1521,9 +1448,9 @@ Test 4:
         (display "all tests passed")
         )))
 
-;(tests4)
+(tests4)
 
-(interpret "Unit Tests/fileToParseTest4-7.txt" 'C)
+;(interpret "Unit Tests/fileToParseTest4-7.txt" 'C)
 ;(interpret "Unit Tests/fileToParseTest4-9.txt" 'Square)
 
 
